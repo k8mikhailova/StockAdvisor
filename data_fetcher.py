@@ -61,9 +61,9 @@ def fetch_historical_data_and_save(start_date, end_date=None, tickers=None):
     else:
         print(f"No data fetched for date range: {start_date.date()} to {end_date.date()}")
 
-#"""
+"""
 start_date = "2023-05-08"
 end_date = "2024-07-18"
 stock = ['AAPL']
 fetch_historical_data_and_save(start_date, end_date, tickers=stock)
-#"""
+"""

@@ -41,7 +41,6 @@ with st.sidebar.expander("Portfolio Allocations"):
                 allocations = {ticker: st.session_state.allocations[ticker] for ticker in st.session_state.allocations}
                 st.session_state.saved_allocations = allocations
                 st.write("Allocations saved.")
-                #st.write(st.session_state.saved_allocations)
             else:
                 st.error("Total allocations must sum to 100% before saving.")
 

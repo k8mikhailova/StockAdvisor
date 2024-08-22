@@ -184,8 +184,22 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
     for advisor in advisors_list:
         portfolio = get_portfolio_shares(simulation_start_date, portfolio_allocations, portfolio_value)
         portfolio_value_usd = portfolio_value
+
+        # Initialize the result with the initial portfolio state
         initial_result = {'Date': simulation_start_date, 'Advisor': 'Initial', 'Portfolio Value USD': portfolio_value,
-                          **portfolio}
+                          'Cash': portfolio['Cash'], **portfolio}
+
+        # Fetch closing prices for the initial date
+        date_data = historical_data[historical_data['date'] == pd.to_datetime(simulation_start_date)]
+        for ticker in tickers_list:
+            ticker_data = date_data[date_data['ticker'] == ticker]
+            if not ticker_data.empty:
+                close_price = ticker_data['close'].values[0]
+                total_value = float(round(portfolio[ticker] * close_price, 3))
+                initial_result.update({f'{ticker} close': close_price, f'{ticker} total': total_value})
+            else:
+                initial_result.update({f'{ticker} close': None, f'{ticker} total': None})
+
         all_results.append(initial_result)
         previous_result = initial_result.copy()
 
@@ -205,14 +219,6 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
                 for ticker in tickers_list:
                     ticker_data = date_data[date_data['ticker'] == ticker]
                     if not ticker_data.empty:
-                        '''
-                        result = {
-                            'Portfolio Value USD': portfolio_value_usd,
-                            'Close': ticker_data['close'].values[0],
-                            **portfolio,
-                            'Total': float(round(portfolio[ticker] * ticker_data['close'].values[0], 3))
-                        }
-                        '''
                         result.update({ticker: portfolio[ticker]})
                         result.update({ticker+' close': ticker_data['close'].values[0]})
                         total = float(round(ticker_data['close'].values[0] * portfolio[ticker], 3))

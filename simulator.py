@@ -20,7 +20,6 @@ def is_open(date):
     date = pd.to_datetime(date)
 
     # Fetch historical data for the given date
-
     try:
         # Load the historical data
         data = pd.read_csv("data.csv")
@@ -163,7 +162,7 @@ def rec_calculations(date, rec):
     return new_portfolio, portfolio_value_usd
 
 
-def get_csv(tickers_list, historical_start_date, historical_end_date, simulation_start_date, simulation_end_date, portfolio_value, portfolio_allocations, advisors_list):
+def get_csv(tickers_list, historical_start_date, historical_end_date, simulation_start_date, simulation_end_date, portfolio_value, portfolio_allocations, advisors_list, csv_path):
     """
     Runs the simulation and saves the results to a CSV file.
 
@@ -178,52 +177,59 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
         str: The path to the generated CSV file.
     """
     fetch_historical_data_and_save(historical_start_date, historical_end_date, tickers_list)
-    #portfolio = get_portfolio_shares(simulation_start_date, portfolio_allocations, portfolio_value)
     all_results = []
     historical_data = pd.read_csv("data.csv")
     historical_data['date'] = pd.to_datetime(historical_data['date'])
 
-    # Add the initial portfolio value and allocations to the results
-    #initial_result = {'Date': simulation_start_date, 'Advisor': 'Initial', 'Portfolio Value USD': portfolio_value,
-    #                  **portfolio}
-    #all_results.append(initial_result)
-
     for advisor in advisors_list:
-        portfolio = get_portfolio_shares(simulation_start_date, portfolio_allocations, portfolio_value) # Added after debugging
+        portfolio = get_portfolio_shares(simulation_start_date, portfolio_allocations, portfolio_value)
         portfolio_value_usd = portfolio_value
         initial_result = {'Date': simulation_start_date, 'Advisor': 'Initial', 'Portfolio Value USD': portfolio_value,
-                          **portfolio} # Added after debugging
-        all_results.append(initial_result) # Added after debugging
-        #print("Portfolio:", portfolio, "portfolio USD:", portfolio_value_usd)
+                          **portfolio}
+        all_results.append(initial_result)
+        previous_result = initial_result.copy()
+
         for single_date in pd.date_range(start=simulation_start_date, end=simulation_end_date):
             date_str = single_date.strftime('%Y-%m-%d')
+            result = {
+                'Date': date_str,
+                'Advisor': advisor
+            }
+
             if is_open(date_str):
                 rec = globals()[f"{advisor}_advisor"](portfolio, date_str)
-                #print(date_str, "recommendation:", rec)
                 portfolio, portfolio_value_usd = rec_calculations(date_str, rec)
                 date_data = historical_data[historical_data['date'] == pd.to_datetime(date_str)]
+                result.update({'Portfolio Value USD': portfolio_value_usd})
+
                 for ticker in tickers_list:
                     ticker_data = date_data[date_data['ticker'] == ticker]
                     if not ticker_data.empty:
+                        '''
                         result = {
-                            'Date': date_str,
-                            'Advisor': advisor,
                             'Portfolio Value USD': portfolio_value_usd,
-                            'Open': ticker_data['open'].values[0],
-                            'High': ticker_data['high'].values[0],
-                            'Low': ticker_data['low'].values[0],
                             'Close': ticker_data['close'].values[0],
-                            'Volume': ticker_data['volume'].values[0],
-                            **portfolio
+                            **portfolio,
+                            'Total': float(round(portfolio[ticker] * ticker_data['close'].values[0], 3))
                         }
-                        all_results.append(result)
+                        '''
+                        result.update({ticker: portfolio[ticker]})
+                        result.update({ticker+' close': ticker_data['close'].values[0]})
+                        total = float(round(ticker_data['close'].values[0] * portfolio[ticker], 3))
+                        result.update({ticker+' total': total})
+                        result.update({'Cash': portfolio['Cash']})
+                previous_result = result
+                all_results.append(result)
+            else:
+                result = previous_result.copy()
+                result['Date'] = date_str
+                all_results.append(result)
 
     df = pd.DataFrame(all_results)
-    csv_path = "simulation_results.csv"
     df.to_csv(csv_path, index=False)
-    return csv_path
 
-'''
+
+#'''
 tickers_list = ["AAPL", "NVDA"]
 historical_start_date = "2024-07-10"
 historical_end_date = "2024-07-18"
@@ -233,7 +239,13 @@ portfolio_value = 1000
 portfolio_allocations = {'Cash': 0, 'AAPL': 50, 'NVDA': 50}
 advisors_list = ['always_cash', 'always_hold']
 
-get_csv(tickers_list, historical_start_date, historical_end_date, simulation_start_date, simulation_end_date, portfolio_value, portfolio_allocations, advisors_list)
+csv_path = "simulation_results.csv"
+get_csv(tickers_list, historical_start_date, historical_end_date, simulation_start_date, simulation_end_date, portfolio_value, portfolio_allocations, advisors_list, csv_path)
+
+simulation_start_date = "2024-07-10"
+simulation_end_date = "2024-07-18"
 #rec = {'Cash': 500.0, 'AAPL': [0.92, 'Sell', 0.92], 'NVDA': [2.75, 'Sell', 2.75]}
+
 #print(rec_calculations(simulation_start_date, rec))
-'''
+#'''
+

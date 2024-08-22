@@ -5,16 +5,24 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from simulator import get_csv
 
-# Sidebar Inputs
-st.sidebar.header("Historical Data Input")
-tickers = st.sidebar.text_input("Enter Stock Ticker Symbols (comma-separated)", "AAPL,TSLA")
-start_date = st.sidebar.date_input("Start Date", datetime.date(2023, 1, 1))
-end_date = st.sidebar.date_input("End Date", datetime.date.today() - datetime.timedelta(days=1))
+st.sidebar.header("StockAdvisor")
 
-st.sidebar.header("Simulation Parameters")
-simulation_start_date = st.sidebar.date_input("Simulation Start Date", start_date)
-simulation_end_date = st.sidebar.date_input("Simulation End Date", end_date)
+# Sidebar Inputs
+st.sidebar.subheader("Historical Data Input")
+tickers = st.sidebar.text_input("Enter Stock Ticker Symbols (comma-separated)")
+start_date = st.sidebar.date_input("Start Date", datetime.date(2023, 1, 1))
+end_date = st.sidebar.date_input("End Date", datetime.date.today())
+
+st.sidebar.subheader("Simulation Parameters")
+simulation_start_date = st.sidebar.date_input("Simulation Start Date", value=None)
+simulation_end_date = st.sidebar.date_input("Simulation End Date", value=None)
+simulation_periods = st.sidebar.text_input("Periods for Simulation (in weeks, comma-separated)", "1,4,26")
 initial_value = st.sidebar.number_input("Initial Portfolio Value (USD)", 1000)
+commission_per_trade = st.sidebar.number_input("Commission per Trade", 0)
+include_tax = st.sidebar.checkbox("Include Tax")
+short_term_capital_gains = st.sidebar.number_input("Short-term Capital Gains Tax Rate", 0)
+long_term_capital_gains = st.sidebar.number_input("Long-term Capital Gains Tax Rate", 0)
+
 
 # Collapsible section for portfolio allocations
 with st.sidebar.expander("Portfolio Allocations"):
@@ -26,15 +34,13 @@ with st.sidebar.expander("Portfolio Allocations"):
 
     if 'allocations' in st.session_state:
         st.subheader("Portfolio Allocations")
-        st.session_state.allocations['Cash'] = st.number_input("% in Cash", 0, 100, st.session_state.allocations['Cash'])
+        st.session_state.allocations['Cash'] = st.number_input("% in Cash", 0, 100, st.session_state.allocations['Cash'], step=10)
         for ticker in st.session_state.allocations:
             if ticker != 'Cash':
-                st.session_state.allocations[ticker] = st.number_input(f"% in {ticker}", 0, 100, st.session_state.allocations[ticker])
+                st.session_state.allocations[ticker] = st.number_input(f"% in {ticker}", 0, 100, st.session_state.allocations[ticker], step=10)
 
         # Ensure allocations sum to 100%
         total_allocation = sum(st.session_state.allocations.values())
-        if total_allocation != 100:
-            st.error("Total allocations must sum to 100%.")
 
         if st.button("Save Allocations"):
             if total_allocation == 100:
@@ -44,8 +50,11 @@ with st.sidebar.expander("Portfolio Allocations"):
             else:
                 st.error("Total allocations must sum to 100% before saving.")
 
+to_email = st.sidebar.checkbox("Email Results")
+email_results = st.sidebar.text_input("Your Email", "gordon.janaway@gmail.com")
+
 # Advisors selection
-st.sidebar.header("Advisors")
+st.sidebar.subheader("Advisors")
 advisor_options = {
     "Always Cash": 'always_cash',
     "Always Hold": 'always_hold',
@@ -55,29 +64,22 @@ advisor_options = {
 selected_advisors = []
 
 for selection, func_name in advisor_options.items():
-    if st.sidebar.checkbox(selection, True):
+    if st.sidebar.checkbox(selection, False):
         selected_advisors.append(func_name)
 
-# Main section - Run Simulation Button
+# Main section - Run Simulation button
 if st.sidebar.button("Run Simulation"):
     tickers_list = [ticker.strip() for ticker in tickers.split(',')]
 
-    if 'saved_allocations' in st.session_state and sum(st.session_state.saved_allocations.values()) == 100:
-
-        csv_path = get_csv(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, initial_value, st.session_state.saved_allocations, selected_advisors)
-
-        # Display results
-        st.header("Simulation Results")
-
+    def plot_simulation_results(csv_path, period_label=None):
         # Load the CSV file into a DataFrame and display it
         df = pd.read_csv(csv_path)
-        st.write(df)
 
         # Convert 'Date' column to datetime
-        df['Date'] = pd.to_datetime(df['Date'])
+        df['Date'] = pd.to_datetime(df['Date']).dt.date # convert to date only
 
         # Plot the portfolio value vs time for each advisor
-        st.header("Portfolio Value Over Time")
+        st.header(f"{period_label if period_label else ''}")
         plt.figure(figsize=(10, 6))
 
         for advisor in selected_advisors:
@@ -86,12 +88,15 @@ if st.sidebar.button("Run Simulation"):
 
         plt.xlabel('Date')
         plt.ylabel('Portfolio Value (USD)')
-        plt.title('Portfolio Value Over Time')
+        plt.title(f'{period_label if period_label else ""}')
         plt.legend()
 
         # Format the date axis to prevent overcrowding
         plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
         plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+
+        # Set x-axis limits to start and end dates
+        plt.xlim(df['Date'].min(), df['Date'].max())
 
         # Manually set x-axis labels
         date_range = df['Date'].unique()
@@ -99,4 +104,38 @@ if st.sidebar.button("Run Simulation"):
         plt.xticks(date_range[::step], rotation=45)
 
         st.pyplot(plt)
+
+        # Display the DataFrame as a table
+        st.write(df)
+
+    if 'saved_allocations' in st.session_state and sum(st.session_state.saved_allocations.values()) == 100:
+
+        # Generate the next CSV file name based on the file index
+        file_index = 0
+
+        # Check if simulation start and end dates are provided
+        if simulation_start_date and simulation_end_date:
+            file_index += 1
+            csv_path = f"simulation_results_{file_index}.csv"
+            get_csv(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, initial_value,
+                    st.session_state.saved_allocations, selected_advisors, csv_path)
+            plot_simulation_results(csv_path, period_label=f"From {simulation_start_date} to {simulation_end_date}")
+            st.write(f"CSV file: {csv_path}")
+
+        # Check if simulation periods are provided
+        if simulation_periods:
+            periods = [int(period.strip()) for period in simulation_periods.split(',')]
+            today = datetime.date.today()
+
+            for period in periods:
+                file_index += 1
+                period_start_date = today - datetime.timedelta(weeks=period)
+                period_end_date = today
+
+                # Overwrite CSV file
+                csv_path = f"simulation_results_{file_index}.csv"
+                get_csv(tickers_list, start_date, end_date, period_start_date, period_end_date, initial_value,
+                        st.session_state.saved_allocations, selected_advisors, csv_path)
+                plot_simulation_results(csv_path, period_label=f"Period: {period} Weeks")
+                st.write(f"CSV file: {csv_path}")
 

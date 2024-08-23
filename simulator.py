@@ -8,30 +8,29 @@ from advisor_3 import dory_advisor
 
 def is_open(date):
     """
-    Check if the market is open on a specific date by checking the availability of data
-    in the CSV file.
+    Check if the market is open on a specific date by checking the availability of data in the csv file
 
     Parameters:
-        date (str): The date to check in 'YYYY-MM-DD' format.
+        date (str): the date to check in 'YYYY-MM-DD' format
 
     Returns:
-        bool: True if data is available for the date (market is open), False otherwise (market is closed).
+        bool: True if data is available for the date (market is open), False otherwise (market is closed)
     """
     date = pd.to_datetime(date)
 
-    # Fetch historical data for the given date
+    # fetch historical data for the given date
     try:
-        # Load the historical data
+        # load the historical data
         data = pd.read_csv("data.csv")
-        data['date'] = pd.to_datetime(data['date'])  # Ensure date column is datetime
+        data['date'] = pd.to_datetime(data['date'])  # ensure date column is datetime
 
-        # Check if there's data for the specified date
+        # check if there's data for the specified date
         date_data = data[data['date'] == date]
 
-        return not date_data.empty  # Return True if data exists, False otherwise
+        return not date_data.empty  # return True if data exists, False otherwise
 
     except FileNotFoundError:
-        print("Historical data file not found.")
+        print("Historical data file not found")
         return False
     except Exception as e:
         print(f"Error reading CSV file: {e}")
@@ -40,21 +39,21 @@ def is_open(date):
 
 def get_portfolio_shares(start_date, portfolio_allocations, portfolio_value):
     """
-    Converts portfolio allocations into shares using historical data. If historical data
-    for the start_date is missing, uses the last available data before the start_date.
+    Converts portfolio allocations into shares using historical data. If historical data for the start_date is missing,
+    uses the last available data before the start_date
 
     Parameters:
-        start_date (str): The start date for the simulation in 'YYYY-MM-DD' format.
-        portfolio_allocations (dict): A dictionary where keys are tickers and values are percentages of the portfolio.
-        portfolio_value (float): The total value of the portfolio.
+        start_date (str): the start date for the simulation in 'YYYY-MM-DD' format
+        portfolio_allocations (dict): a dictionary where keys are tickers and values are percentages of the portfolio
+        portfolio_value (float): the total value of the portfolio
 
     Returns:
-        dict: A dictionary where keys are tickers and values are amounts of shares.
+        dict: a dictionary where keys are tickers and values are amounts of shares
     """
-    # Convert start_date to datetime
+    # convert start_date to datetime
     start_date = pd.to_datetime(start_date)
 
-    # Load the historical data
+    # load the historical data
     historical_data = pd.read_csv("data.csv")
     historical_data['date'] = pd.to_datetime(historical_data['date'])  # ensure date column is datetime
 
@@ -85,14 +84,14 @@ def get_portfolio_shares(start_date, portfolio_allocations, portfolio_value):
 
 def rec_calculations(date, rec):
     """
-    Processes advisor recommendations and updates the portfolio.
+    Processes advisor recommendations and updates the portfolio
 
     Parameters:
-        date (str): The date for the recommendation.
-        rec (dict): A dictionary with recommendations for each ticker.
+        date (str): the date for the recommendation
+        rec (dict): a dictionary with recommendations for each ticker
 
     Returns:
-        tuple: A tuple containing the updated portfolio and the total portfolio value in USD.
+        tuple: a tuple containing the updated portfolio and the total portfolio value in USD
     """
 
     # retrieve historical data to get the close value
@@ -107,7 +106,6 @@ def rec_calculations(date, rec):
     portfolio_value_usd = 0
     cash = rec.get("Cash", 0)
     new_portfolio = {"Cash": cash}
-    #print("recomendation:", rec)
 
     for ticker, value in rec.items():
         if ticker == 'Cash':
@@ -119,7 +117,6 @@ def rec_calculations(date, rec):
             continue
 
         close_value = date_data['close'].values[0]
-        #print(f"Close value for {ticker} on {date}: {close_value}")
 
         if value[1].lower() == 'do nothing':
             new_portfolio[ticker] = round(value[0], 3)
@@ -136,9 +133,6 @@ def rec_calculations(date, rec):
             cash += value[2] * close_value
             portfolio_value_usd += remaining_shares * close_value
             new_portfolio[ticker] = round(remaining_shares, 3)
-            #print("remaining shares:", remaining_shares)
-            #print("cash:", cash)
-            #print("portfolio USD:", portfolio_value_usd)
 
         elif value[1].lower() == 'hold':
             new_portfolio[ticker] = round(value[0], 3)
@@ -148,33 +142,26 @@ def rec_calculations(date, rec):
             # Implement later
             pass
 
-        #print(f"Updated portfolio: {new_portfolio}")
-        #print(f"Updated cash: {cash}")
-        #print(f"Current portfolio value in USD: {portfolio_value_usd}")
-
     new_portfolio['Cash'] = float(round(cash, 2))
-    portfolio_value_usd += cash  # Add cash to the total portfolio value
+    portfolio_value_usd += cash  # add cash to the total portfolio value
     portfolio_value_usd = float(round(portfolio_value_usd, 2))
-
-    #print(f"Final portfolio: {new_portfolio}")
-    #print(f"Final portfolio value in USD: {portfolio_value_usd}")
 
     return new_portfolio, portfolio_value_usd
 
 
 def get_csv(tickers_list, historical_start_date, historical_end_date, simulation_start_date, simulation_end_date, portfolio_value, portfolio_allocations, advisors_list, csv_path):
     """
-    Runs the simulation and saves the results to a CSV file.
+    Runs the simulation and saves the results to a csv file
 
     Parameters:
-        simulation_start_date (str): The start date of the simulation.
-        simulation_end_date (str): The end date of the simulation.
-        portfolio_value (float): The initial value of the portfolio.
-        portfolio_allocations (dict): Initial allocations of the portfolio.
-        advisors_list (list): List of advisor functions to use.
+        simulation_start_date (str): the start date of the simulation
+        simulation_end_date (str): the end date of the simulation
+        portfolio_value (float): the initial value of the portfolio
+        portfolio_allocations (dict): initial allocations of the portfolio
+        advisors_list (list): list of advisor functions to use
 
     Returns:
-        str: The path to the generated CSV file.
+        str: the path to the generated csv file
     """
     fetch_historical_data_and_save(historical_start_date, historical_end_date, tickers_list)
     all_results = []
@@ -185,11 +172,11 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
         portfolio = get_portfolio_shares(simulation_start_date, portfolio_allocations, portfolio_value)
         portfolio_value_usd = portfolio_value
 
-        # Initialize the result with the initial portfolio state
+        # initialize the result with the initial portfolio state
         initial_result = {'Date': simulation_start_date, 'Advisor': 'Initial', 'Portfolio Value USD': portfolio_value,
                           'Cash': portfolio['Cash'], **portfolio}
 
-        # Fetch closing prices for the initial date
+        # fetch closing prices for the initial date
         date_data = historical_data[historical_data['date'] == pd.to_datetime(simulation_start_date)]
         for ticker in tickers_list:
             ticker_data = date_data[date_data['ticker'] == ticker]
@@ -235,7 +222,9 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
     df.to_csv(csv_path, index=False)
 
 
-#'''
+'''
+# this is for debugging
+
 tickers_list = ["AAPL", "NVDA"]
 historical_start_date = "2024-07-10"
 historical_end_date = "2024-07-18"
@@ -252,6 +241,6 @@ simulation_start_date = "2024-07-10"
 simulation_end_date = "2024-07-18"
 #rec = {'Cash': 500.0, 'AAPL': [0.92, 'Sell', 0.92], 'NVDA': [2.75, 'Sell', 2.75]}
 
-#print(rec_calculations(simulation_start_date, rec))
-#'''
+print(rec_calculations(simulation_start_date, rec))
+'''
 

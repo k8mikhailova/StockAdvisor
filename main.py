@@ -9,48 +9,48 @@ from config import EMAIL_ADDRESS, DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, 
 
 st.sidebar.header("StockAdvisor")
 
-# Create a dictionary to manage sidebar navigation
+# creating a dictionary for sidebar navigation
 pages = {
     "Main": "main",
     "Settings": "settings"
 }
 
-# Sidebar navigation
+# sidebar navigation
 page = st.sidebar.selectbox("Select Page", options=list(pages.keys()))
 
 if page == "Settings":
-    # Settings tab
+    # settings tab
     st.header("Settings")
 
-    # Email input
+    # email input
     email = st.sidebar.text_input("Your email", EMAIL_ADDRESS)
     st.session_state.email_results = email
 
-    # Time input for calculations and email
+    # time input for calculations and email
     calculations_time = st.sidebar.time_input("Set up time of day to calculate positions and balances", DEFAULT_CALCULATION_TIME)
     st.session_state.calculations_time = calculations_time
 
     email_time = st.sidebar.time_input("Set up time of day to email results", DEFAULT_EMAIL_TIME)
     st.session_state.email_time = email_time
 
-    # Display current settings
+    # display current settings
     st.write(f"Current Email: {st.session_state.get('email_results', 'Not Set')}")
     st.write(f"Positions and balances will be calculated at {calculations_time.strftime('%I:%M %p')}")
     st.write(f"You will be emailed at {email_time.strftime('%I:%M %p')}")
 
-    # Save button
+    # if save button is clicked...
     if st.sidebar.button("Save"):
-        # Save settings to a file
+        # save settings to a file
         with open(SETTINGS_FILE_PATH, "w") as file:
             file.write(f"{st.session_state.email_results}\n")
             file.write(f"{st.session_state.calculations_time.strftime('%H:%M:%S')}\n")
             file.write(f"{st.session_state.email_time.strftime('%H:%M:%S')}\n")
 
-        # Show success message
+        # show success message
         st.sidebar.success("Settings saved successfully.")
 
 else:
-    # Main tab
+    # main tab
     st.sidebar.subheader("Historical Data Input")
     tickers = st.sidebar.text_input("Enter Stock Ticker Symbols (comma-separated)")
     start_date = st.sidebar.date_input("Start Date", datetime.date(2023, 1, 1))
@@ -66,7 +66,7 @@ else:
     short_term_capital_gains = st.sidebar.number_input("Short-term Capital Gains Tax Rate", 0)
     long_term_capital_gains = st.sidebar.number_input("Long-term Capital Gains Tax Rate", 0)
 
-    # Collapsible section for portfolio allocations
+    # collapsible section for portfolio allocations
     with st.sidebar.expander("Portfolio Allocations"):
         if st.button("Update Stocks"):
             tickers_list = [ticker.strip() for ticker in tickers.split(',')]
@@ -81,7 +81,7 @@ else:
                 if ticker != 'Cash':
                     st.session_state.allocations[ticker] = st.number_input(f"% in {ticker}", 0, 100, st.session_state.allocations[ticker], step=10)
 
-            # Ensure allocations sum to 100%
+            # ensure allocations sum to 100%
             total_allocation = sum(st.session_state.allocations.values())
 
             if st.button("Save Allocations"):
@@ -92,7 +92,7 @@ else:
                 else:
                     st.error("Total allocations must sum to 100% before saving.")
 
-    # Advisors selection
+    # advisors selection
     st.sidebar.subheader("Advisors")
     advisor_options = {
         "Always Cash": 'always_cash',
@@ -106,18 +106,18 @@ else:
         if st.sidebar.checkbox(selection, False):
             selected_advisors.append(func_name)
 
-    # Main section - Run Simulation button
+    # main section - if run Simulation button is clicked...
     if st.sidebar.button("Run Simulation"):
         tickers_list = [ticker.strip() for ticker in tickers.split(',')]
 
         def plot_simulation_results(csv_path, period_label=None):
-            # Load the CSV file into a DataFrame and display it
+            # load the csv file into a dataframe and display it
             df = pd.read_csv(csv_path)
 
-            # Convert 'Date' column to datetime
+            # convert date column to datetime
             df['Date'] = pd.to_datetime(df['Date']).dt.date # convert to date only
 
-            # Plot the portfolio value vs time for each advisor
+            # plot the portfolio value vs time for each advisor
             st.header(f"{period_label if period_label else ''}")
             plt.figure(figsize=(10, 6))
 
@@ -130,29 +130,29 @@ else:
             plt.title(f'{period_label if period_label else ""}')
             plt.legend()
 
-            # Format the date axis to prevent overcrowding
+            # format the date axis to prevent overcrowding
             plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
             plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
 
-            # Set x-axis limits to start and end dates
+            # set x-axis limits to start and end dates
             plt.xlim(df['Date'].min(), df['Date'].max())
 
-            # Manually set x-axis labels
+            # manually set x-axis labels
             date_range = df['Date'].unique()
-            step = max(1, len(date_range) // 10)  # Adjust step to control the number of labels
+            step = max(1, len(date_range) // 10)  # adjust step to control the number of labels
             plt.xticks(date_range[::step], rotation=45)
 
             st.pyplot(plt)
 
-            # Display the DataFrame as a table
+            # display the dataframe as a table
             st.write(df)
 
         if 'saved_allocations' in st.session_state and sum(st.session_state.saved_allocations.values()) == 100:
 
-            # Generate the next CSV file name based on the file index
+            # generate the next csv file name based on the file index
             file_index = 0
 
-            # Check if simulation start and end dates are provided
+            # check if simulation start and end dates are provided
             if simulation_start_date and simulation_end_date:
                 file_index += 1
                 csv_path = f"simulation_results_{file_index}.csv"
@@ -161,7 +161,7 @@ else:
                 plot_simulation_results(csv_path, period_label=f"From {simulation_start_date} to {simulation_end_date}")
                 st.write(f"CSV file: {csv_path}")
 
-            # Check if simulation periods are provided
+            # check if simulation periods are provided
             if simulation_periods:
                 periods = [int(period.strip()) for period in simulation_periods.split(',')]
                 today = datetime.date.today()
@@ -171,7 +171,7 @@ else:
                     period_start_date = today - datetime.timedelta(weeks=period)
                     period_end_date = today
 
-                    # Overwrite CSV file
+                    # overwrite csv file
                     csv_path = f"simulation_results_{file_index}.csv"
                     get_csv(tickers_list, start_date, end_date, period_start_date, period_end_date, initial_value,
                             st.session_state.saved_allocations, selected_advisors, csv_path)

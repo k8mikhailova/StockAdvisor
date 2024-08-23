@@ -10,24 +10,25 @@ def fetch_historical_data_and_save(start_date, end_date=None, tickers=None):
     and save the results to a file named 'data.csv'.
 
     Parameters:
-        start_date (str): The start date for data collection in 'YYYY-MM-DD' format.
-        end_date (str, optional): The end date for data collection in 'YYYY-MM-DD' format.
-        tickers (list, optional): A list of stock ticker symbols.
+        start_date (str): the start date for data collection in 'YYYY-MM-DD' format
+        end_date (str, optional): the end date for data collection in 'YYYY-MM-DD' format
+        tickers (list, optional): a list of stock ticker symbols
 
     Returns:
         None
     """
+
     if end_date is None:
         end_date = pd.to_datetime(start_date) + pd.DateOffset(days=1)
     else:
-        end_date = pd.to_datetime(end_date) + pd.DateOffset(days=1)  # Include end date in the range
+        end_date = pd.to_datetime(end_date) + pd.DateOffset(days=1)  # include end date in the range
 
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
 
     all_data = []
 
-    # Generate all dates in the range
+    # generate all dates in the range
     all_dates = pd.date_range(start=start_date, end=end_date - pd.DateOffset(days=1), freq='D')
     all_dates_df = pd.DataFrame({'date': all_dates})
 
@@ -43,7 +44,8 @@ def fetch_historical_data_and_save(start_date, end_date=None, tickers=None):
                 df['date'] = pd.to_datetime(df['date'])
                 df['ticker'] = ticker
                 df = df[['date', 'ticker', 'open', 'close', 'high', 'low', 'volume']]
-                # Filter for the given date range
+
+                # filter for the given date range
                 df = df[(df['date'] >= start_date) & (df['date'] < end_date)]
                 if not df.empty:
                     all_data.append(df)
@@ -62,6 +64,8 @@ def fetch_historical_data_and_save(start_date, end_date=None, tickers=None):
         print(f"No data fetched for date range: {start_date.date()} to {end_date.date()}")
 
 """
+# this if for debugging
+
 start_date = "2023-05-08"
 end_date = "2024-07-18"
 stock = ['AAPL']

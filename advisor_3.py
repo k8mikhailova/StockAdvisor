@@ -70,8 +70,10 @@ def dory_advisor(portfolio, date):
 
     return recommendations
 
+'''
 # Example usage:
 date = "2024-08-13"
 portfolio = {"Cash": 500, "AAPL": 3.123, "NVDA": 2.401, "MSFT": 0.23}
 
 print(dory_advisor(portfolio, date))
+'''

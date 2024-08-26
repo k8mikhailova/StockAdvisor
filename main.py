@@ -7,6 +7,13 @@ import matplotlib.dates as mdates
 from simulator import get_csv
 from config import EMAIL_ADDRESS, DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, SETTINGS_FILE_PATH, APP_PASSWORD
 
+# set page configuration
+st.set_page_config(
+    page_title="Stock Advisor",  # title of the tab
+    page_icon=":bar_chart:",     # icon (can be emoji or path to an image file)
+    layout="wide"                # layout of the page (optional)
+)
+
 
 # Password protection logic
 def check_password():

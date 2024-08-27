@@ -6,17 +6,21 @@ from config import EMAIL_ADDRESS, EMAIL_PASSWORD, SMTP_SERVER, SMTP_PORT, SETTIN
 
 
 def send_email(recipient_email):
-    # create the email message
-    msg = EmailMessage()
-    msg.set_content("Hello")
-    msg["Subject"] = "Automated Email"
-    msg["From"] = EMAIL_ADDRESS
-    msg["To"] = recipient_email
+    try:
+        # create the email message
+        msg = EmailMessage()
+        msg.set_content("Hello")
+        msg["Subject"] = "Automated Email"
+        msg["From"] = EMAIL_ADDRESS
+        msg["To"] = recipient_email
 
-    # send the email
-    with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-        server.send_message(msg)
+        # send the email
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            server.send_message(msg)
+        print("Email sent")
+    except Exception as e:
+        print("Failed to send email")
 
 
 def is_automation_active():
@@ -39,14 +43,19 @@ def main():
                 lines = file.readlines()
                 email = lines[0].strip()
                 email_time = datetime.strptime(lines[2].strip(), "%H:%M:%S").time()
-
             now = datetime.now().time()
+
             # check if the current time matches the email time
             if now.hour == email_time.hour and now.minute == email_time.minute:
                 send_email(email)
                 # wait for a minute before checking again to avoid multiple sends
                 time.sleep(60)
 
-        # wait for 30 seconds before checking the time again
-        time.sleep(30)
+            # wait for 30 seconds before checking the time again
+            time.sleep(30)
+
+
+if __name__ == "__main__":
+    main()
+
 

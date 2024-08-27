@@ -17,6 +17,4 @@ DEFAULT_EMAIL_TIME = time(19, 0)
 # file paths
 SETTINGS_FILE_PATH = "settings.txt"
 
-# authentification settings
-APP_PASSWORD = os.getenv("APP_PASSWORD", "12345")
 

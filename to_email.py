@@ -19,23 +19,36 @@ def send_email(recipient_email):
         server.send_message(msg)
 
 
+def is_automation_active():
+    # check the control file to see if automation is active
+    try:
+        with open(SETTINGS_FILE_PATH, "r") as file:
+            status = file.readline().strip()
+        return status.lower() != "inactive"
+    except FileNotFoundError:
+        # control file does not exist, default to inactive
+        return False
+
+
 def main():
     while True:
-        # read the settings from the file
-        with open(SETTINGS_FILE_PATH, "r") as file:
-            lines = file.readlines()
-            email = lines[0].strip()
-            email_time = datetime.strptime(lines[2].strip(), "%H:%M:%S").time()
+        # check if automation is active
+        if is_automation_active():
+            # read the settings from the file
+            with open(SETTINGS_FILE_PATH, "r") as file:
+                lines = file.readlines()
+                email = lines[0].strip()
+                email_time = datetime.strptime(lines[2].strip(), "%H:%M:%S").time()
 
-        now = datetime.now().time()
-        # check if the current time matches the email time
-        if now.hour == email_time.hour and now.minute == email_time.minute:
-            send_email(email)
-            # wait for a minute before checking again to avoid multiple sends
-            time.sleep(60)
+            now = datetime.now().time()
+            # check if the current time matches the email time
+            if now.hour == email_time.hour and now.minute == email_time.minute:
+                send_email(email)
+                # wait for a minute before checking again to avoid multiple sends
+                time.sleep(60)
+        else:
+            print("Automation is paused. Set to active to resume.")
+
         # wait for 30 seconds before checking the time again
         time.sleep(30)
 
-
-if __name__ == "__main__":
-    main()

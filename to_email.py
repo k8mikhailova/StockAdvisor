@@ -46,8 +46,6 @@ def main():
                 send_email(email)
                 # wait for a minute before checking again to avoid multiple sends
                 time.sleep(60)
-        else:
-            print("Automation is paused. Set to active to resume.")
 
         # wait for 30 seconds before checking the time again
         time.sleep(30)

@@ -5,13 +5,16 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="eadb341d-9c02-401f-948a-6b847ae674a5" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/helper_functions.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data.csv" beforeDir="false" afterPath="$PROJECT_DIR$/data.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/helper_functions.py" beforeDir="false" afterPath="$PROJECT_DIR$/helper_functions.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/settings.txt" beforeDir="false" afterPath="$PROJECT_DIR$/settings.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/simulation_results_1.csv" beforeDir="false" afterPath="$PROJECT_DIR$/simulation_results_1.csv" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/simulation_results_2.csv" beforeDir="false" afterPath="$PROJECT_DIR$/simulation_results_2.csv" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/simulation_results_3.csv" beforeDir="false" afterPath="$PROJECT_DIR$/simulation_results_3.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/simulation_results_4.csv" beforeDir="false" afterPath="$PROJECT_DIR$/simulation_results_4.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/to_email.py" beforeDir="false" afterPath="$PROJECT_DIR$/to_email.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

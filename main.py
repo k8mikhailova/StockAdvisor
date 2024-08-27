@@ -3,16 +3,14 @@ import datetime
 from datetime import time
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from simulator import get_csv
 from config import EMAIL_ADDRESS, DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, SETTINGS_FILE_PATH
-from helper_functions import validate_tickers
+from helper_functions import validate_tickers, plot_simulation_results
 
 # set page configuration
 st.set_page_config(
     page_title="StockAdvisor",  # title of the tab
-    page_icon=":bar_chart:",     # icon (can be emoji or path to an image file)
-    layout="wide"                # layout of the page (optional)
+    page_icon=":bar_chart:"     # icon (can be emoji or path to an image file)
 )
 
 st.sidebar.header("StockAdvisor Input")
@@ -67,10 +65,10 @@ if page == "Settings":
 
 else:
     # main tab
-    st.header("StockAdvisor")
     st.sidebar.subheader("Historical Data Input")
     tickers = st.sidebar.text_input("Enter Stock Ticker Symbols (comma-separated)")
 
+    # error handling
     if tickers:
         tickers_list = [ticker.strip() for ticker in tickers.split(',')]
         valid_tickers, invalid_tickers = validate_tickers(tickers_list)
@@ -130,46 +128,9 @@ else:
         if st.sidebar.checkbox(selection, False):
             selected_advisors.append(func_name)
 
-    # main section - if run Simulation button is clicked...
+    # main section - if run simulation button is clicked...
     if st.sidebar.button("Run Simulation"):
         tickers_list = [ticker.strip() for ticker in tickers.split(',')]
-
-        def plot_simulation_results(csv_path, period_label=None):
-            # load the csv file into a dataframe and display it
-            df = pd.read_csv(csv_path)
-
-            # convert date column to datetime
-            df['Date'] = pd.to_datetime(df['Date']).dt.date # convert to date only
-
-            # plot the portfolio value vs time for each advisor
-            st.header(f"{period_label if period_label else ''}")
-            plt.figure(figsize=(10, 6))
-
-            for advisor in selected_advisors:
-                advisor_df = df[df['Advisor'] == advisor]
-                plt.plot(advisor_df['Date'], advisor_df['Portfolio Value USD'], label=advisor)
-
-            plt.xlabel('Date')
-            plt.ylabel('Portfolio Value (USD)')
-            plt.title(f'{period_label if period_label else ""}')
-            plt.legend()
-
-            # format the date axis to prevent overcrowding
-            plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
-            plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-
-            # set x-axis limits to start and end dates
-            plt.xlim(df['Date'].min(), df['Date'].max())
-
-            # manually set x-axis labels
-            date_range = df['Date'].unique()
-            step = max(1, len(date_range) // 10)  # adjust step to control the number of labels
-            plt.xticks(date_range[::step], rotation=45)
-
-            st.pyplot(plt)
-
-            # display the dataframe as a table
-            st.write(df)
 
         if 'saved_allocations' in st.session_state and sum(st.session_state.saved_allocations.values()) == 100:
 
@@ -182,8 +143,8 @@ else:
                 csv_path = f"simulation_results_{file_index}.csv"
                 get_csv(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, initial_value,
                         st.session_state.saved_allocations, selected_advisors, csv_path)
-                plot_simulation_results(csv_path, period_label=f"From {simulation_start_date} to {simulation_end_date}")
-                st.write(f"CSV file: {csv_path}")
+                plot_simulation_results(selected_advisors, csv_path, period_label=f"From {simulation_start_date} to {simulation_end_date}")
+                print(f"Period: {"date input"} CSV file: {csv_path}")
 
             # check if simulation periods are provided
             if simulation_periods:
@@ -199,6 +160,6 @@ else:
                     csv_path = f"simulation_results_{file_index}.csv"
                     get_csv(tickers_list, start_date, end_date, period_start_date, period_end_date, initial_value,
                             st.session_state.saved_allocations, selected_advisors, csv_path)
-                    plot_simulation_results(csv_path, period_label=f"Period: {period} Weeks")
-                    st.write(f"CSV file: {csv_path}")
+                    plot_simulation_results(selected_advisors, csv_path, period_label=f"Period: {period} Weeks")
+                    print(f"period: {period} CSV file: {csv_path}")
 

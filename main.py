@@ -6,15 +6,16 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from simulator import get_csv
 from config import EMAIL_ADDRESS, DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, SETTINGS_FILE_PATH
+from helper_functions import validate_tickers
 
 # set page configuration
 st.set_page_config(
-    page_title="Stock Advisor",  # title of the tab
+    page_title="StockAdvisor",  # title of the tab
     page_icon=":bar_chart:",     # icon (can be emoji or path to an image file)
     layout="wide"                # layout of the page (optional)
 )
 
-st.sidebar.header("StockAdvisor")
+st.sidebar.header("StockAdvisor Input")
 
 # Creating a dictionary for sidebar navigation
 pages = {
@@ -66,8 +67,17 @@ if page == "Settings":
 
 else:
     # main tab
+    st.header("StockAdvisor")
     st.sidebar.subheader("Historical Data Input")
     tickers = st.sidebar.text_input("Enter Stock Ticker Symbols (comma-separated)")
+
+    if tickers:
+        tickers_list = [ticker.strip() for ticker in tickers.split(',')]
+        valid_tickers, invalid_tickers = validate_tickers(tickers_list)
+
+        if invalid_tickers:
+            st.sidebar.error(f"Invalid tickers: {', '.join(invalid_tickers)}")
+
     start_date = st.sidebar.date_input("Start Date", datetime.date(2023, 1, 1))
     end_date = st.sidebar.date_input("End Date", datetime.date.today())
 
@@ -84,7 +94,6 @@ else:
     # collapsible section for portfolio allocations
     with st.sidebar.expander("Portfolio Allocations"):
         if st.button("Update Stocks"):
-            tickers_list = [ticker.strip() for ticker in tickers.split(',')]
             st.session_state.allocations = {ticker: 0 for ticker in tickers_list}
             st.session_state.allocations['Cash'] = 100
             st.write("Allocations updated based on input tickers.")

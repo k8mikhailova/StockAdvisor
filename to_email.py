@@ -11,7 +11,7 @@ def send_email(recipient_email):
         msg = EmailMessage()
         msg.set_content("Hello")
         msg["Subject"] = "Automated Email"
-        msg["From"] = EMAIL_ADDRESS
+        msg["From"] = "StockAdvisor"
         msg["To"] = recipient_email
 
         # send the email

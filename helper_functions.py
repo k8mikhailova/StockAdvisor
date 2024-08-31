@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import streamlit as st
 import pandas as pd
+import datetime
 
 
 def validate_tickers(tickers):
@@ -66,3 +67,47 @@ def plot_simulation_results(selected_advisors, csv_path, period_label=None):
 
     # display the dataframe as a table
     st.write(df)
+
+
+def read_and_display(file_path, display_area):
+    """Reads settings from the file and displays them in the specified area."""
+    try:
+        with open(file_path, "r") as file:
+            lines = file.readlines()
+            if len(lines) >= 3 and lines[0].strip().lower() != "inactive":
+                email = lines[0].strip()
+                try:
+                    # assume military time format with seconds
+                    time_format = "%H:%M:%S"
+                    calculations_time = datetime.datetime.strptime(lines[1].strip(), time_format).time()
+                    email_time = datetime.datetime.strptime(lines[2].strip(), time_format).time()
+
+                    # clear the display area and then display updated content
+                    display_area.empty()
+                    display_area.markdown(
+                        f"**Current Email:** {email}<br>"
+                        f"**Positions and balances will be calculated at:** {calculations_time.strftime('%I:%M %p')}<br>"
+                        f"**You will be emailed at:** {email_time.strftime('%I:%M %p')}",
+                        unsafe_allow_html=True
+                    )
+                except ValueError as e:
+                    display_area.write(
+                        f"Error reading time values: {e}. Ensure the time format is 'HH:MM:SS'.")
+                    return
+            else:
+                display_area.empty()
+                display_area.write("Automation is paused. Set to active to resume.")
+    except FileNotFoundError:
+        display_area.empty()
+        display_area.write("No settings file found.")
+
+
+def save_settings(file_path, email, calculations_time, email_time, status):
+    """Saves the settings to the file."""
+    with open(file_path, "w") as file:
+        if status == "Active":
+            file.write(f"{email}\n")
+            file.write(f"{calculations_time.strftime('%H:%M:%S')}\n")  # save in military time format with seconds
+            file.write(f"{email_time.strftime('%H:%M:%S')}\n")  # save in military time format with seconds
+        else:
+            file.write("inactive\n")

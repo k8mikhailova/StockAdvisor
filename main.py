@@ -1,11 +1,8 @@
 import streamlit as st
 import datetime
-from datetime import time
-import pandas as pd
-import matplotlib.pyplot as plt
 from simulator import get_csv
 from config import EMAIL_ADDRESS, DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, SETTINGS_FILE_PATH
-from helper_functions import validate_tickers, plot_simulation_results
+from helper_functions import validate_tickers, plot_simulation_results, read_and_display, save_settings
 
 # set page configuration
 st.set_page_config(
@@ -15,53 +12,56 @@ st.set_page_config(
 
 st.sidebar.header("StockAdvisor Input")
 
-# Creating a dictionary for sidebar navigation
+# creating a dictionary for sidebar navigation
 pages = {
-    "Main": "main",
-    "Settings": "settings"
+    "Simulator": "main",
+    "Email Settings": "settings"
 }
 
 # sidebar navigation
 page = st.sidebar.selectbox("Select Page", options=list(pages.keys()))
 
-if page == "Settings":
-    # settings tab
-    st.header("Settings")
+
+if page == "Email Settings":
+    st.sidebar.header("Settings")
+    st.header("Email Settings")
+
+    # create an empty placeholder to display settings
+    settings_display_area = st.empty()
+
+    # display current settings
+    read_and_display(SETTINGS_FILE_PATH, settings_display_area)
 
     # email input
-    email = st.sidebar.text_input("Your email", EMAIL_ADDRESS)
-    st.session_state.email_results = email
+    email = st.sidebar.text_input("Your email", st.session_state.get('email_results', 'gordon.janaway@gmail.com'))
 
     # time input for calculations and email
-    calculations_time = st.sidebar.time_input("Set up time of day to calculate positions and balances", DEFAULT_CALCULATION_TIME)
-    st.session_state.calculations_time = calculations_time
-
-    email_time = st.sidebar.time_input("Set up time of day to email results", DEFAULT_EMAIL_TIME)
-    st.session_state.email_time = email_time
+    calculations_time = st.sidebar.time_input("Set up time of day to calculate positions and balances",
+                                              st.session_state.get('calculations_time', DEFAULT_CALCULATION_TIME))
+    email_time = st.sidebar.time_input("Set up time of day to email results",
+                                       st.session_state.get('email_time', DEFAULT_EMAIL_TIME))
 
     # control Automation
-    control_status = st.sidebar.radio("Email Automation", options=["Active", "Paused"])
+    control_status = st.sidebar.radio("Email Automation",
+                                      options=["Active", "Paused"],
+                                      index=0 if st.session_state.get('control_status', 'Active') == "Active" else 1)
 
     # if save button is clicked...
     if st.sidebar.button("Save"):
-        if control_status == "Active":
-            # display current settings
-            st.write(f"Current Email: {st.session_state.get('email_results', 'Not Set')}")
-            st.write(f"Positions and balances will be calculated at {calculations_time.strftime('%I:%M %p')}")
-            st.write(f"You will be emailed at {email_time.strftime('%I:%M %p')}")
+        # Save settings to session state
+        st.session_state.email_results = email
+        st.session_state.calculations_time = calculations_time
+        st.session_state.email_time = email_time
+        st.session_state.control_status = control_status
 
-            # save settings to a file
-            with open(SETTINGS_FILE_PATH, "w") as file:
-                file.write(f"{st.session_state.email_results}\n")
-                file.write(f"{st.session_state.calculations_time.strftime('%H:%M:%S')}\n")
-                file.write(f"{st.session_state.email_time.strftime('%H:%M:%S')}\n")
-        else:
-            st.write("Automation is paused. Set to active to resume.")
-            with open(SETTINGS_FILE_PATH, "w") as file:
-                file.write("inactive")
+        # save settings to file
+        save_settings(SETTINGS_FILE_PATH, email, calculations_time, email_time, control_status)
 
         # show success message
         st.sidebar.success("Settings saved successfully.")
+
+        # update the display area with the new settings
+        read_and_display(SETTINGS_FILE_PATH, settings_display_area)
 
 else:
     # main tab

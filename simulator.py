@@ -149,11 +149,15 @@ def rec_calculations(date, rec):
     return new_portfolio, portfolio_value_usd
 
 
-def get_csv(tickers_list, historical_start_date, historical_end_date, simulation_start_date, simulation_end_date, portfolio_value, portfolio_allocations, advisors_list, csv_path):
+def get_csv(tickers_list, historical_start_date, historical_end_date, simulation_start_date, simulation_end_date,
+            portfolio_value, portfolio_allocations, advisors_list, csv_path):
     """
     Runs the simulation and saves the results to a csv file
 
     Parameters:
+        tickers_list (list): a list of tickers
+        historical_start_date (str): the start date of data fetching
+        historical_end_date (str): the end date of data fetching
         simulation_start_date (str): the start date of the simulation
         simulation_end_date (str): the end date of the simulation
         portfolio_value (float): the initial value of the portfolio

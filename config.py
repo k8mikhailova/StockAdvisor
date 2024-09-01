@@ -2,7 +2,7 @@ import os
 from datetime import time
 
 # replace with your API from Financial Modeling Prep API website
-API_KEY = 'zhzleqfh71Kmb7zRXqR96MMPbZqSW6PN'
+API_KEY = 'BQBaPwzBLXxy53wmWawbOeNmkRNmqYeR'
 
 # email settings
 EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "katemo03el@gmail.com")
@@ -15,6 +15,7 @@ DEFAULT_CALCULATION_TIME = time(17, 0)
 DEFAULT_EMAIL_TIME = time(19, 0)
 
 # file paths
-SETTINGS_FILE_PATH = "settings.txt"
+SETTINGS_FILE_PATH = "email_settings.json"
+PARAMETERS_FILE_PATH = "parameters.json"
 
 

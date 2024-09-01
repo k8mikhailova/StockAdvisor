@@ -1,8 +1,9 @@
 import streamlit as st
-import datetime
+from datetime import datetime, date, timedelta
+from config import DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, SETTINGS_FILE_PATH
+from helper_functions import (validate_tickers, plot_simulation_results, read_and_display, save_email_settings,
+                              save_email_parameters)
 from simulator import get_csv
-from config import EMAIL_ADDRESS, DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, SETTINGS_FILE_PATH
-from helper_functions import validate_tickers, plot_simulation_results, read_and_display, save_settings
 
 # set page configuration
 st.set_page_config(
@@ -55,7 +56,7 @@ if page == "Email Settings":
         st.session_state.control_status = control_status
 
         # save settings to file
-        save_settings(SETTINGS_FILE_PATH, email, calculations_time, email_time, control_status)
+        save_email_settings(email, calculations_time, email_time, control_status)
 
         # show success message
         st.sidebar.success("Settings saved successfully.")
@@ -65,6 +66,7 @@ if page == "Email Settings":
 
 else:
     # main tab
+    st.sidebar.text("")
     st.sidebar.subheader("Historical Data Input")
     tickers = st.sidebar.text_input("Enter Stock Ticker Symbols (comma-separated)")
 
@@ -76,13 +78,19 @@ else:
         if invalid_tickers:
             st.sidebar.error(f"Invalid tickers: {', '.join(invalid_tickers)}")
 
-    start_date = st.sidebar.date_input("Start Date", datetime.date(2023, 1, 1))
-    end_date = st.sidebar.date_input("End Date", datetime.date.today())
+    tickers_list = [ticker.strip() for ticker in tickers.split(',')]
 
+    start_date = st.sidebar.date_input("Start Date", date(2023, 1, 1))
+    end_date = st.sidebar.date_input("End Date", date.today())
+
+    st.sidebar.text("")
     st.sidebar.subheader("Simulation Parameters")
     simulation_start_date = st.sidebar.date_input("Simulation Start Date", value=None)
     simulation_end_date = st.sidebar.date_input("Simulation End Date", value=None)
     simulation_periods = st.sidebar.text_input("Periods for Simulation (in weeks, comma-separated)", "1,4,26")
+
+    periods = [int(period.strip()) for period in simulation_periods.split(',')]
+
     initial_value = st.sidebar.number_input("Initial Portfolio Value (USD)", 1000)
     commission_per_trade = st.sidebar.number_input("Commission per Trade", 0)
     include_tax = st.sidebar.checkbox("Include Tax")
@@ -116,6 +124,7 @@ else:
 
     # advisors selection
     st.sidebar.subheader("Advisors")
+
     advisor_options = {
         "Always Cash": 'always_cash',
         "Always Hold": 'always_hold',
@@ -130,10 +139,12 @@ else:
 
     # main section - if run simulation button is clicked...
     if st.sidebar.button("Run Simulation"):
-        tickers_list = [ticker.strip() for ticker in tickers.split(',')]
 
-        if 'saved_allocations' in st.session_state and sum(st.session_state.saved_allocations.values()) == 100:
+        allocations = st.session_state.saved_allocations
 
+        if not selected_advisors:
+            st.sidebar.error("Please select at least one advisor before running the simulation.")
+        elif 'saved_allocations' in st.session_state and sum(allocations.values()) == 100:
             # generate the next csv file name based on the file index
             file_index = 0
 
@@ -142,24 +153,29 @@ else:
                 file_index += 1
                 csv_path = f"simulation_results_{file_index}.csv"
                 get_csv(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, initial_value,
-                        st.session_state.saved_allocations, selected_advisors, csv_path)
-                plot_simulation_results(selected_advisors, csv_path, period_label=f"From {simulation_start_date} to {simulation_end_date}")
+                        allocations, selected_advisors, csv_path)
+                plot_simulation_results(selected_advisors, csv_path,
+                                        period_label=f"From {simulation_start_date} to {simulation_end_date}")
                 print(f"Period: {"date input"} CSV file: {csv_path}")
 
             # check if simulation periods are provided
-            if simulation_periods:
-                periods = [int(period.strip()) for period in simulation_periods.split(',')]
-                today = datetime.date.today()
+            if periods:
+                today = date.today()
 
                 for period in periods:
                     file_index += 1
-                    period_start_date = today - datetime.timedelta(weeks=period)
+                    period_start_date = today - timedelta(weeks=period)
                     period_end_date = today
 
                     # overwrite csv file
                     csv_path = f"simulation_results_{file_index}.csv"
                     get_csv(tickers_list, start_date, end_date, period_start_date, period_end_date, initial_value,
-                            st.session_state.saved_allocations, selected_advisors, csv_path)
+                            allocations, selected_advisors, csv_path)
                     plot_simulation_results(selected_advisors, csv_path, period_label=f"Period: {period} Weeks")
                     print(f"period: {period} CSV file: {csv_path}")
+
+        # save parameters for emailing
+        save_email_parameters(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, periods,
+                              initial_value, commission_per_trade, include_tax, short_term_capital_gains,
+                              long_term_capital_gains, allocations, selected_advisors)
 

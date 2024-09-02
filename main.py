@@ -93,6 +93,9 @@ else:
 
     initial_value = st.sidebar.number_input("Initial Portfolio Value (USD)", 1000)
     commission_per_trade = st.sidebar.number_input("Commission per Trade", 0)
+    # initialize the tax variables with default values
+    short_term_capital_gains = 0
+    long_term_capital_gains = 0
     include_tax = st.sidebar.checkbox("Include Tax")
 
     if include_tax:

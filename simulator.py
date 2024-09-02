@@ -1,5 +1,4 @@
 import pandas as pd
-from datetime import datetime, timedelta
 from data_fetcher import fetch_historical_data_and_save
 from advisor_1 import always_cash_advisor
 from advisor_2 import always_hold_advisor
@@ -82,13 +81,14 @@ def get_portfolio_shares(start_date, portfolio_allocations, portfolio_value):
     return portfolio_shares
 
 
-def rec_calculations(date, rec):
+def rec_calculations(date, rec, commission_per_trade):
     """
     Processes advisor recommendations and updates the portfolio
 
     Parameters:
         date (str): the date for the recommendation
         rec (dict): a dictionary with recommendations for each ticker
+        commission_per_trade (int)
 
     Returns:
         tuple: a tuple containing the updated portfolio and the total portfolio value in USD
@@ -106,6 +106,7 @@ def rec_calculations(date, rec):
     portfolio_value_usd = 0
     cash = rec.get("Cash", 0)
     new_portfolio = {"Cash": cash}
+    commission = 0
 
     for ticker, value in rec.items():
         if ticker == 'Cash':
@@ -127,12 +128,14 @@ def rec_calculations(date, rec):
             portfolio_value_usd += new_shares * close_value
             cash -= value[2] * close_value
             new_portfolio[ticker] = round(new_shares, 3)
+            commission += commission_per_trade
 
         elif value[1].lower() == 'sell':
             remaining_shares = value[0] - value[2]
             cash += value[2] * close_value
             portfolio_value_usd += remaining_shares * close_value
             new_portfolio[ticker] = round(remaining_shares, 3)
+            commission += commission_per_trade
 
         elif value[1].lower() == 'hold':
             new_portfolio[ticker] = round(value[0], 3)
@@ -146,11 +149,12 @@ def rec_calculations(date, rec):
     portfolio_value_usd += cash  # add cash to the total portfolio value
     portfolio_value_usd = float(round(portfolio_value_usd, 2))
 
-    return new_portfolio, portfolio_value_usd
+    return new_portfolio, portfolio_value_usd, commission
 
 
 def get_csv(tickers_list, historical_start_date, historical_end_date, simulation_start_date, simulation_end_date,
-            portfolio_value, portfolio_allocations, advisors_list, csv_path):
+            portfolio_value, portfolio_allocations, commission_per_trade, include_tax, short_term_capital_gains,
+            long_term_capital_gains, advisors_list, csv_path):
     """
     Runs the simulation and saves the results to a csv file
 
@@ -162,7 +166,12 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
         simulation_end_date (str): the end date of the simulation
         portfolio_value (float): the initial value of the portfolio
         portfolio_allocations (dict): initial allocations of the portfolio
+        commission_per_trade (int)
+        include_tax (bool)
+        short_term_capital_gains (int)
+        long_term_capital_gains (int)
         advisors_list (list): list of advisor functions to use
+        csv_path (str): a path where the csv will be stored
 
     Returns:
         str: the path to the generated csv file
@@ -203,7 +212,7 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
 
             if is_open(date_str):
                 rec = globals()[f"{advisor}_advisor"](portfolio, date_str)
-                portfolio, portfolio_value_usd = rec_calculations(date_str, rec)
+                portfolio, portfolio_value_usd, commission = rec_calculations(date_str, rec, commission_per_trade)
                 date_data = historical_data[historical_data['date'] == pd.to_datetime(date_str)]
                 result.update({'Portfolio Value USD': portfolio_value_usd})
 

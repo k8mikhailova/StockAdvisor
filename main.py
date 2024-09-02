@@ -31,7 +31,7 @@ if page == "Email Settings":
     settings_display_area = st.empty()
 
     # display current settings
-    read_and_display(SETTINGS_FILE_PATH, settings_display_area)
+    read_and_display(settings_display_area)
 
     # email input
     email = st.sidebar.text_input("Your email", st.session_state.get('email_results', 'gordon.janaway@gmail.com'))
@@ -62,7 +62,7 @@ if page == "Email Settings":
         st.sidebar.success("Settings saved successfully.")
 
         # update the display area with the new settings
-        read_and_display(SETTINGS_FILE_PATH, settings_display_area)
+        read_and_display(settings_display_area)
 
 else:
     # main tab
@@ -94,8 +94,10 @@ else:
     initial_value = st.sidebar.number_input("Initial Portfolio Value (USD)", 1000)
     commission_per_trade = st.sidebar.number_input("Commission per Trade", 0)
     include_tax = st.sidebar.checkbox("Include Tax")
-    short_term_capital_gains = st.sidebar.number_input("Short-term Capital Gains Tax Rate", 0)
-    long_term_capital_gains = st.sidebar.number_input("Long-term Capital Gains Tax Rate", 0)
+
+    if include_tax:
+        short_term_capital_gains = st.sidebar.number_input("Short-term Capital Gains Tax Rate (%)", 0)
+        long_term_capital_gains = st.sidebar.number_input("Long-term Capital Gains Tax Rate (%)", 0)
 
     # collapsible section for portfolio allocations
     with st.sidebar.expander("Portfolio Allocations"):
@@ -137,6 +139,14 @@ else:
         if st.sidebar.checkbox(selection, False):
             selected_advisors.append(func_name)
 
+    st.sidebar.write("")
+    if st.sidebar.checkbox("Update Email Parameters"):
+        allocations = st.session_state.saved_allocations
+        # save parameters for emailing
+        save_email_parameters(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, periods,
+                              initial_value, commission_per_trade, include_tax, short_term_capital_gains,
+                              long_term_capital_gains, allocations, selected_advisors)
+
     # main section - if run simulation button is clicked...
     if st.sidebar.button("Run Simulation"):
 
@@ -153,7 +163,8 @@ else:
                 file_index += 1
                 csv_path = f"simulation_results_{file_index}.csv"
                 get_csv(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, initial_value,
-                        allocations, selected_advisors, csv_path)
+                        allocations, commission_per_trade, include_tax, short_term_capital_gains,
+                        long_term_capital_gains, selected_advisors, csv_path)
                 plot_simulation_results(selected_advisors, csv_path,
                                         period_label=f"From {simulation_start_date} to {simulation_end_date}")
                 print(f"Period: {"date input"} CSV file: {csv_path}")
@@ -170,12 +181,9 @@ else:
                     # overwrite csv file
                     csv_path = f"simulation_results_{file_index}.csv"
                     get_csv(tickers_list, start_date, end_date, period_start_date, period_end_date, initial_value,
-                            allocations, selected_advisors, csv_path)
+                            allocations, commission_per_trade, include_tax, short_term_capital_gains,
+                            long_term_capital_gains, selected_advisors, csv_path)
                     plot_simulation_results(selected_advisors, csv_path, period_label=f"Period: {period} Weeks")
                     print(f"period: {period} CSV file: {csv_path}")
 
-        # save parameters for emailing
-        save_email_parameters(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, periods,
-                              initial_value, commission_per_trade, include_tax, short_term_capital_gains,
-                              long_term_capital_gains, allocations, selected_advisors)
 

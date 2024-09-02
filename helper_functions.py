@@ -124,35 +124,77 @@ def plot_graphs(selected_advisors, csv_path, save_path=None, period_label=None):
     plt.close()
 
 
-def read_and_display(file_path, display_area):
-    """Reads settings from the JSON file and displays them in the specified area."""
+def load_json_file(file_path):
+    """Load data from a JSON file."""
     try:
         with open(file_path, "r") as file:
-            settings = json.load(file)
-
-        status = settings.get("status")
-        email = settings.get("email", "")
-        calculations_time_str = settings.get("calculations_time", "")
-        email_time_str = settings.get("email_time", "")
-
-        if status.lower() == "active":
-            time_format = "%H:%M:%S"
-            calculations_time = datetime.strptime(calculations_time_str, time_format).time()
-            email_time = datetime.strptime(email_time_str, time_format).time()
-
-            display_area.empty()
-            display_area.markdown(
-                f"**Current Email:** {email}<br>"
-                f"**Positions and balances will be calculated at:** {calculations_time.strftime('%I:%M %p')}<br>"
-                f"**You will be emailed at:** {email_time.strftime('%I:%M %p')}",
-                unsafe_allow_html=True
-            )
-        elif status.lower() == "paused":
-            display_area.empty()
-            display_area.write("Automation is paused. Set to active to resume.")
+            return json.load(file)
     except FileNotFoundError:
+        print(f"File not found: {file_path}")
+        return {}
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON from file: {file_path}")
+        return {}
+
+
+def read_and_display(display_area):
+    """Reads settings from the JSON files and displays them in the specified area."""
+    settings = load_json_file(SETTINGS_FILE_PATH)
+    parameters = load_json_file(PARAMETERS_FILE_PATH)
+
+    status = settings.get("status", "").lower()
+    email = settings.get("email", "")
+    calculations_time_str = settings.get("calculations_time", "")
+    email_time_str = settings.get("email_time", "")
+
+    if status == "active":
+        time_format = "%H:%M:%S"
+        calculations_time = datetime.strptime(calculations_time_str, time_format).time()
+        email_time = datetime.strptime(email_time_str, time_format).time()
+
+        # extract additional information from parameters.json
+        tickers_list = parameters.get("tickers", [])
+        start_date = parameters.get("start_date", "")
+        end_date = parameters.get("end_date", "")
+        portfolio_value = parameters.get("portfolio_value", 1000)
+        periods = parameters.get("periods", [])
+        commission_per_trade = parameters.get("commission_per_trade", 0)
+        include_tax = parameters.get("tax", False)
+        short_term_capital_gains_tax_rate = parameters.get("short_term_capital_gains_tax_rate", 0)
+        long_term_capital_gains_tax_rate = parameters.get("long_term_capital_gains_tax_rate", 0)
+        portfolio_allocations = parameters.get("portfolio_allocations", {})
+        selected_advisors = parameters.get("advisors", [])
+
+        # convert periods to strings
+        periods_str = [str(period) for period in periods]
+
+        # Create markdown content
+        content = (
+            f"**Current Email:** {email}<br>"
+            f"**Positions and balances will be calculated at:** {calculations_time.strftime('%I:%M %p')}<br>"
+            f"**You will be emailed at:** {email_time.strftime('%I:%M %p')}<br><br>"
+            f"**Tickers:** {', '.join(tickers_list)}<br>"
+            f"**Simulation Start Date:** {start_date}<br>"
+            f"**Simulation End Date:** {end_date}<br>"
+            f"**Periods:** {', '.join(periods_str)} weeks<br>"
+            f"**Portfolio Value:** ${portfolio_value:}<br>"
+            f"**Commission per trade:** {commission_per_trade:}<br>"
+            f"**Tax Included:** {'Yes' if include_tax else 'No'}<br>"
+            f"**Short Term Capital Gains Tax Rate:** {short_term_capital_gains_tax_rate:.2f}%<br>"
+            f"**Long Term Capital Gains Tax Rate:** {long_term_capital_gains_tax_rate:.2f}%<br>"
+            f"**Portfolio Allocations:** {portfolio_allocations}<br>"
+            f"**Selected Advisors:** {', '.join(selected_advisors)}"
+        )
+
+        # Display information from both files
         display_area.empty()
-        display_area.write("No settings file found.")
+        display_area.markdown(content, unsafe_allow_html=True)
+    elif status == "paused":
+        display_area.empty()
+        display_area.write("Automation is paused. Set to active to resume.")
+    else:
+        display_area.empty()
+        display_area.write("No active settings found.")
 
 
 def save_email_settings(email, calculations_time, email_time, status):
@@ -199,7 +241,7 @@ def save_email_parameters(tickers, start_date, end_date, sim_start_date, sim_end
 
 
 def run_simulation(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date,
-                   periods, initial_value, allocations, selected_advisors):
+                   periods, initial_value, allocations, commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors):
     '''
     Generates csv files and creates png images of plots.
     return: a list of png file names
@@ -215,7 +257,7 @@ def run_simulation(tickers_list, start_date, end_date, simulation_start_date, si
         file_index += 1
         csv_path = f"simulation_results_{file_index}.csv"
         get_csv(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, initial_value,
-                allocations, selected_advisors, csv_path)
+                allocations, commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors, csv_path)
         save_path = "plot_1.png"
         plot_graphs(selected_advisors, csv_path, save_path, period_label=f"From {simulation_start_date} to {simulation_end_date}")
         png_list.append(save_path)
@@ -232,7 +274,7 @@ def run_simulation(tickers_list, start_date, end_date, simulation_start_date, si
             # overwrite csv file
             csv_path = f"simulation_results_{file_index}.csv"
             get_csv(tickers_list, start_date, end_date, period_start_date, period_end_date, initial_value,
-                    allocations, selected_advisors, csv_path)
+                    allocations, commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors, csv_path)
             save_path = f"plot_{file_index}.png"
             plot_graphs(selected_advisors, csv_path, save_path, period_label=f"Period: {period} Weeks")
             png_list.append(save_path)

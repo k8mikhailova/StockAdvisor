@@ -29,13 +29,18 @@ def send_email(recipient_email, png_list):
 def generate_email_content(recipient_email, png_list):
     # create the email content
     msg = MIMEMultipart("related")
-    msg["Subject"] = "Automated Email with Plots"
+    msg["Subject"] = "Daily Reports from StockAdvisor"
     msg["From"] = EMAIL_ADDRESS
     msg["To"] = recipient_email
 
     # create the email body with HTML
-    html_content = "<html><body>"
-    html_content += "<h1>Attached Plots</h1>"
+    html_content = """
+        <html>
+        <body>
+            <p>Hello,</p>
+            <p>Here’s your daily report from StockAdvisor, featuring the latest stock market performance based on the periods you've tracked.</p>
+            <h2>Market Performance Graphs</h2>
+        """
 
     # iterate over the list of plot image paths
     image_parts = []
@@ -48,7 +53,6 @@ def generate_email_content(recipient_email, png_list):
                     img_type = os.path.splitext(plot_path)[1][1:]  # get image file type (e.g., 'png')
                     img_name = os.path.basename(plot_path)
 
-                    # create an image MIME part
                     # create an image MIME part
                     img_part = MIMEImage(img_data, _subtype=img_type)
                     img_part.add_header("Content-ID", f"<{img_name}>")
@@ -63,7 +67,12 @@ def generate_email_content(recipient_email, png_list):
         else:
             print(f"Path {plot_path} is not a file.")
 
-    html_content += "</body></html>"
+    # add the closing content
+    html_content += """
+        <p>For a more detailed analysis or to adjust your tracked periods, please log in to StockAdvisor.</p>
+    </body>
+    </html>
+    """
 
     # attach the HTML content to the email
     msg.attach(MIMEText(html_content, "html"))
@@ -136,13 +145,14 @@ def main():
                         initial_value = parameters.get("portfolio_value", 1000)
                         commission_per_trade = parameters.get("commisson_per_trade", 0)
                         include_tax = parameters.get("tax", False)
-                        short_term_capital_gains_tax_rate = parameters.get("short_term_capital_gains_tax_rate", 0)
-                        long_term_capital_gains_tax_rate = parameters.get("long_term_capital_gains_tax_rate", 0)
+                        short_term_capital_gains = parameters.get("short_term_capital_gains_tax_rate", 0)
+                        long_term_capital_gains = parameters.get("long_term_capital_gains_tax_rate", 0)
                         allocations = parameters.get("portfolio_allocations", {})
                         selected_advisors = parameters.get("advisors", [])
 
                         png_list = run_simulation(tickers_list, start_date, end_date, simulation_start_date,
-                                                  simulation_end_date, periods, initial_value, allocations, selected_advisors)
+                                                  simulation_end_date, periods, initial_value, allocations, commission_per_trade,
+                                                  include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors)
                         print(png_list)
                         print("Simulation executed.")
 

@@ -1,13 +1,11 @@
 {
     "tickers": [
-        "AAPL",
-        "TSLA",
-        "NVDA"
+        "AAPL"
     ],
     "start_date": "2023-01-01",
-    "end_date": "2024-08-31",
-    "simulation_start_date": "2024-08-01",
-    "simulation_end_date": "2024-08-31",
+    "end_date": "2024-09-01",
+    "simulation_start_date": "",
+    "simulation_end_date": "",
     "periods": [
         1,
         4,
@@ -15,14 +13,12 @@
     ],
     "portfolio_value": 1000,
     "commisson_per_trade": 0,
-    "tax": false,
+    "tax": true,
     "short_term_capital_gains_tax_rate": 0,
     "long_term_capital_gains_tax_rate": 0,
     "portfolio_allocations": {
         "AAPL": 10,
-        "TSLA": 10,
-        "NVDA": 10,
-        "Cash": 70
+        "Cash": 90
     },
     "advisors": [
         "always_cash",

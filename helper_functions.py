@@ -68,8 +68,14 @@ def plot_simulation_results(selected_advisors, csv_path, period_label=None):
 
     st.pyplot(plt)
 
-    # display the dataframe as a table
-    st.write(df)
+    # generate and display the summary table
+    summary_df = summarize_portfolio(csv_path)
+    st.markdown("<h3 style='font-size: 18px;'>Summary of Portfolio Performance</h3>", unsafe_allow_html=True)
+    st.write(summary_df)
+
+    # display the original dataframe as a table inside an expander
+    with st.expander("View Original Data"):
+        st.write(df)
 
 
 def plot_graphs(selected_advisors, csv_path, save_path=None, period_label=None):
@@ -250,7 +256,8 @@ def run_simulation(tickers_list, start_date, end_date, simulation_start_date, si
     # generate the next csv file name based on the file index
     file_index = 0
 
-    png_list = []
+    png_files = []
+    csv_files = []
 
     # check if simulation start and end dates are provided
     if simulation_start_date and simulation_end_date:
@@ -260,7 +267,8 @@ def run_simulation(tickers_list, start_date, end_date, simulation_start_date, si
                 allocations, commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors, csv_path)
         save_path = "plot_1.png"
         plot_graphs(selected_advisors, csv_path, save_path, period_label=f"From {simulation_start_date} to {simulation_end_date}")
-        png_list.append(save_path)
+        png_files.append(save_path)
+        csv_files.append(csv_path)
 
     # check if simulation periods are provided
     if periods:
@@ -277,6 +285,71 @@ def run_simulation(tickers_list, start_date, end_date, simulation_start_date, si
                     allocations, commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors, csv_path)
             save_path = f"plot_{file_index}.png"
             plot_graphs(selected_advisors, csv_path, save_path, period_label=f"Period: {period} Weeks")
-            png_list.append(save_path)
+            png_files.append(save_path)
+            csv_files.append(csv_path)
 
-    return png_list
+    # return a dictionary with 'png' and 'csv' keys
+    return {
+        'png': png_files,
+        'csv': csv_files
+    }
+
+
+def summarize_portfolio(csv_file):
+    # read the csv file into a DataFrame
+    df = pd.read_csv(csv_file)
+
+    # extract tickers from the column names
+    tickers = [col.split()[0] for col in df.columns if 'total' in col]
+
+    # initialize an empty list to store the results
+    summary_data = []
+
+    # group the data by Advisor
+    grouped = df.groupby('Advisor')
+
+    # iterate over each group (advisor)
+    for advisor, group, in grouped:
+        # get the initial and final portfolio values
+        initial_value = group.iloc[0]['Portfolio Value USD']
+        final_value = group.iloc[-1]['Portfolio Value USD']
+
+        # calculate the percentage return
+        percent_return = round(((final_value - initial_value) / initial_value) * 100, 2)
+
+        # calculate the total for each ticker on the last day
+        ticker_totals = {f'{ticker} total': group.iloc[-1][f'{ticker} total'] for ticker in tickers}
+
+        # append the results to the summary_data list
+        summary_data.append({
+            'Advisor': advisor,
+            'Final Portfolio Value': final_value,
+            '% Return': percent_return,
+            **ticker_totals
+        })
+
+    # convert the summary_data list into a DataFrame
+    summary_df = pd.DataFrame(summary_data)
+
+    return summary_df
+
+
+def create_summary_html(csv_file):
+    ''' this function is used as an addition to summarize portfolio function and is used for emailing'''
+    # call summarize_portfolio to get the summary DataFrame
+    summary_df = summarize_portfolio(csv_file)
+
+    # convert the DataFrame to an HTML table
+    table_html = summary_df.to_html(classes='table table-bordered', index=False)
+
+    # return the HTML table
+    return table_html
+
+
+'''
+# Example usage of summarize_portfolio function
+csv_file = 'simulation_results_3.csv'
+summary_df = summarize_portfolio(csv_file)
+print(summary_df)
+'''
+

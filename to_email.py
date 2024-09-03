@@ -8,14 +8,15 @@ import os
 from datetime import datetime
 import time
 import json
+import pandas as pd
 from config import EMAIL_ADDRESS, EMAIL_PASSWORD, SMTP_SERVER, SMTP_PORT, SETTINGS_FILE_PATH
-from helper_functions import run_simulation
+from helper_functions import run_simulation, create_summary_html
 
 
-def send_email(recipient_email, png_list):
+def send_email(recipient_email, png_csv_dict):
     try:
         # create the email message
-        msg = generate_email_content(recipient_email, png_list)
+        msg = generate_email_content(recipient_email, png_csv_dict)
 
         # send the email
         with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
@@ -26,7 +27,7 @@ def send_email(recipient_email, png_list):
         print("Failed to send email:", e)
 
 
-def generate_email_content(recipient_email, png_list):
+def generate_email_content(recipient_email, png_csv_dict):
     # create the email content
     msg = MIMEMultipart("related")
     msg["Subject"] = "Daily Reports from StockAdvisor"
@@ -39,19 +40,19 @@ def generate_email_content(recipient_email, png_list):
         <body>
             <p>Hello,</p>
             <p>Here’s your daily report from StockAdvisor, featuring the latest stock market performance based on the periods you've tracked.</p>
-            <h2>Market Performance Graphs</h2>
         """
 
-    # iterate over the list of plot image paths
     image_parts = []
-    for plot_path in png_list:
-        if os.path.isfile(plot_path):  # check if path is a file
+
+    # iterate over the PNG and CSV file paths
+    for png_path, csv_path in zip(png_csv_dict['png'], png_csv_dict['csv']):
+        if os.path.isfile(png_path):  # check if PNG path is a file
             try:
-                # attach the image to the email body
-                with open(plot_path, "rb") as f:
+                # attach the PNG image to the email body
+                with open(png_path, "rb") as f:
                     img_data = f.read()
-                    img_type = os.path.splitext(plot_path)[1][1:]  # get image file type (e.g., 'png')
-                    img_name = os.path.basename(plot_path)
+                    img_type = os.path.splitext(png_path)[1][1:]  # get image file type (e.g., 'png')
+                    img_name = os.path.basename(png_path)
 
                     # create an image MIME part
                     img_part = MIMEImage(img_data, _subtype=img_type)
@@ -62,22 +63,33 @@ def generate_email_content(recipient_email, png_list):
                     # add the image to the HTML content
                     html_content += f'<img src="cid:{img_name}" alt="{img_name}"><br>'
 
+                    print(f"Added image: {png_path}")
+
             except Exception as e:
-                print(f"Failed to include {plot_path} in the email body: {e}")
-        else:
-            print(f"Path {plot_path} is not a file.")
+                print(f"Failed to include {png_path} in the email body: {e}")
+
+        if os.path.isfile(csv_path):  # Check if CSV path is a file
+            try:
+                # Generate the summary HTML table
+                table_html = create_summary_html(csv_path)
+
+                # Add the HTML table to the email content
+                html_content += f'<h3>Summary of Portfolio Performance</h3>{table_html}<br>'
+
+            except Exception as e:
+                print(f"Failed to include {csv_path} in the email body: {e}")
 
     # add the closing content
     html_content += """
-        <p>For a more detailed analysis or to adjust your tracked periods, please log in to StockAdvisor.</p>
-    </body>
-    </html>
+            <p>For a more detailed analysis or to adjust your tracked periods, please log in to StockAdvisor.</p>
+        </body>
+        </html>
     """
 
     # attach the HTML content to the email
-    msg.attach(MIMEText(html_content, "html"))
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-    # then attach all image parts
+    # Attach all image parts after the HTML content
     for img_part in image_parts:
         msg.attach(img_part)
 
@@ -106,7 +118,7 @@ def load_parameters():
 
 
 def main():
-    png_list = []
+    png_csv_dict = {}
 
     while True:
         # check if automation is active
@@ -150,18 +162,18 @@ def main():
                         allocations = parameters.get("portfolio_allocations", {})
                         selected_advisors = parameters.get("advisors", [])
 
-                        png_list = run_simulation(tickers_list, start_date, end_date, simulation_start_date,
+                        png_csv_dict = run_simulation(tickers_list, start_date, end_date, simulation_start_date,
                                                   simulation_end_date, periods, initial_value, allocations, commission_per_trade,
                                                   include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors)
-                        print(png_list)
+                        print(png_csv_dict)
                         print("Simulation executed.")
 
-                    # Wait for a minute before checking again to avoid multiple executions
+                    # wait for a minute before checking again to avoid multiple executions
                     time.sleep(60)
 
                 # check if the current time matches the email time
                 if now.hour == email_time.hour and now.minute == email_time.minute:
-                    send_email(email, png_list)
+                    send_email(email, png_csv_dict)
                     # wait for a minute before checking again to avoid multiple sends
                     time.sleep(60)
 

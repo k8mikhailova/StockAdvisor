@@ -155,7 +155,13 @@ else:
 
         allocations = st.session_state.saved_allocations
 
-        if not selected_advisors:
+        # check if allocations match the tickers (this is for error handling)
+        allocation_tickers = set(allocations.keys()) - {'Cash'}
+        input_tickers = set(tickers_list)
+
+        if allocation_tickers != input_tickers:
+            st.sidebar.error("Please update stocks and save new allocations.")
+        elif not selected_advisors:
             st.sidebar.error("Please select at least one advisor before running the simulation.")
         elif 'saved_allocations' in st.session_state and sum(allocations.values()) == 100:
             # generate the next csv file name based on the file index
@@ -170,7 +176,6 @@ else:
                         long_term_capital_gains, selected_advisors, csv_path)
                 plot_simulation_results(selected_advisors, csv_path,
                                         period_label=f"From {simulation_start_date} to {simulation_end_date}")
-                print(f"Period: {"date input"} CSV file: {csv_path}")
 
             # check if simulation periods are provided
             if periods:
@@ -187,6 +192,6 @@ else:
                             allocations, commission_per_trade, include_tax, short_term_capital_gains,
                             long_term_capital_gains, selected_advisors, csv_path)
                     plot_simulation_results(selected_advisors, csv_path, period_label=f"Period: {period} Weeks")
-                    print(f"period: {period} CSV file: {csv_path}")
+
 
 

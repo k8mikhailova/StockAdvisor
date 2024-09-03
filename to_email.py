@@ -10,7 +10,7 @@ import time
 import json
 import pandas as pd
 from config import EMAIL_ADDRESS, EMAIL_PASSWORD, SMTP_SERVER, SMTP_PORT, SETTINGS_FILE_PATH
-from helper_functions import run_simulation, create_summary_html
+from helper_functions import run_simulation, create_summary_html, is_automation_active, load_parameters
 
 
 def send_email(recipient_email, png_csv_dict):
@@ -36,18 +36,26 @@ def generate_email_content(recipient_email, png_csv_dict):
 
     # create the email body with HTML
     html_content = """
-        <html>
-        <body>
-            <p>Hello,</p>
-            <p>Here’s your daily report from StockAdvisor, featuring the latest stock market performance based on the periods you've tracked.</p>
-        """
+            <html>
+            <body>
+                <p>Hello,</p>
+                <p>Here’s your daily report from StockAdvisor, featuring the latest stock market performance based on the periods you've tracked.</p>
+            """
 
     image_parts = []
 
+    # get the lists of PNG paths and period labels
+    png_files = png_csv_dict['png']
+    csv_files = png_csv_dict['csv']
+    period_labels = png_csv_dict['period_labels']
+
     # iterate over the PNG and CSV file paths
-    for png_path, csv_path in zip(png_csv_dict['png'], png_csv_dict['csv']):
+    for png_path, csv_path , period_label in zip(png_files, csv_files, period_labels):
         if os.path.isfile(png_path):  # check if PNG path is a file
             try:
+                # add the period label before the image
+                html_content += f'<h3>{period_label}</h3>'
+
                 # attach the PNG image to the email body
                 with open(png_path, "rb") as f:
                     img_data = f.read()
@@ -68,23 +76,23 @@ def generate_email_content(recipient_email, png_csv_dict):
             except Exception as e:
                 print(f"Failed to include {png_path} in the email body: {e}")
 
-        if os.path.isfile(csv_path):  # Check if CSV path is a file
+        if os.path.isfile(csv_path):  # check if CSV path is a file
             try:
-                # Generate the summary HTML table
+                # generate the summary HTML table
                 table_html = create_summary_html(csv_path)
 
-                # Add the HTML table to the email content
-                html_content += f'<h3>Summary of Portfolio Performance</h3>{table_html}<br>'
+                # add the HTML table to the email content
+                html_content += f'<h3>Summary of Portfolio Performance</h3>{table_html}<br><br>'
 
             except Exception as e:
                 print(f"Failed to include {csv_path} in the email body: {e}")
 
     # add the closing content
     html_content += """
-            <p>For a more detailed analysis or to adjust your tracked periods, please log in to StockAdvisor.</p>
-        </body>
-        </html>
-    """
+                <p>For a more detailed analysis or to adjust your tracked periods, please log in to StockAdvisor.</p>
+            </body>
+            </html>
+        """
 
     # attach the HTML content to the email
     msg.attach(MIMEText(html_content, "html", "utf-8"))
@@ -94,27 +102,6 @@ def generate_email_content(recipient_email, png_csv_dict):
         msg.attach(img_part)
 
     return msg
-
-
-def is_automation_active():
-    """Check if automation is active based on the JSON settings file."""
-    try:
-        with open(SETTINGS_FILE_PATH, "r") as file:
-            settings = json.load(file)
-        return settings.get("status", "").lower() == "active"  # true or false
-    except FileNotFoundError:
-        # control file does not exist, default to inactive
-        return False
-
-
-def load_parameters():
-    """Load parameters from parameters.json."""
-    try:
-        with open("parameters.json", "r") as file:
-            return json.load(file)
-    except FileNotFoundError:
-        print("Parameters file not found.")
-        return {}
 
 
 def main():

@@ -258,6 +258,7 @@ def run_simulation(tickers_list, start_date, end_date, simulation_start_date, si
 
     png_files = []
     csv_files = []
+    period_labels = []
 
     # check if simulation start and end dates are provided
     if simulation_start_date and simulation_end_date:
@@ -266,9 +267,11 @@ def run_simulation(tickers_list, start_date, end_date, simulation_start_date, si
         get_csv(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, initial_value,
                 allocations, commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors, csv_path)
         save_path = "plot_1.png"
-        plot_graphs(selected_advisors, csv_path, save_path, period_label=f"From {simulation_start_date} to {simulation_end_date}")
+        period_label = f"From {simulation_start_date} to {simulation_end_date}"
+        plot_graphs(selected_advisors, csv_path, save_path, period_label=period_label)
         png_files.append(save_path)
         csv_files.append(csv_path)
+        period_labels.append(period_label)
 
     # check if simulation periods are provided
     if periods:
@@ -284,14 +287,17 @@ def run_simulation(tickers_list, start_date, end_date, simulation_start_date, si
             get_csv(tickers_list, start_date, end_date, period_start_date, period_end_date, initial_value,
                     allocations, commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors, csv_path)
             save_path = f"plot_{file_index}.png"
-            plot_graphs(selected_advisors, csv_path, save_path, period_label=f"Period: {period} Weeks")
+            period_label = f"Period: {period} Weeks"
+            plot_graphs(selected_advisors, csv_path, save_path, period_label=period_label)
             png_files.append(save_path)
             csv_files.append(csv_path)
+            period_labels.append(period_label)
 
     # return a dictionary with 'png' and 'csv' keys
     return {
         'png': png_files,
-        'csv': csv_files
+        'csv': csv_files,
+        'period_labels': period_labels
     }
 
 
@@ -346,10 +352,33 @@ def create_summary_html(csv_file):
     return table_html
 
 
+def is_automation_active():
+    """Check if automation is active based on the JSON settings file."""
+    try:
+        with open(SETTINGS_FILE_PATH, "r") as file:
+            settings = json.load(file)
+        return settings.get("status", "").lower() == "active"  # true or false
+    except FileNotFoundError:
+        # control file does not exist, default to inactive
+        return False
+
+
+def load_parameters():
+    """Load parameters from parameters.json."""
+    try:
+        with open("parameters.json", "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        print("Parameters file not found.")
+        return {}
+
+
 '''
 # Example usage of summarize_portfolio function
 csv_file = 'simulation_results_3.csv'
 summary_df = summarize_portfolio(csv_file)
 print(summary_df)
 '''
+
+
 

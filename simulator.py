@@ -122,36 +122,37 @@ def rec_calculations(date, rec, commission_per_trade):
         close_value = date_data['close'].values[0]
 
         if value[1].lower() == 'do nothing':
-            new_portfolio[ticker] = round(value[0], 3)
+            new_portfolio[ticker] = value[0]
             portfolio_value_usd += value[0] * close_value
-            #print("new portfolio when do nothing: ", new_portfolio)
+            print("new portfolio when do nothing: ", new_portfolio)
 
         elif value[1].lower() == 'buy':
             new_shares = value[0] + value[2]
             portfolio_value_usd += new_shares * close_value
             cash -= value[2] * close_value
-            new_portfolio[ticker] = round(new_shares, 3)
+            new_portfolio[ticker] = new_shares
             commission += commission_per_trade
-            #print("new portfolio when buy: ", new_portfolio)
+            print("new portfolio when buy: ", new_portfolio)
 
         elif value[1].lower() == 'sell':
             remaining_shares = value[0] - value[2]
             cash += value[2] * close_value
             portfolio_value_usd += remaining_shares * close_value
-            new_portfolio[ticker] = round(remaining_shares, 3)
+            new_portfolio[ticker] = remaining_shares
             commission += commission_per_trade
+            print("new portfolio when sell: ", new_portfolio)
 
         elif value[1].lower() == 'hold':
-            new_portfolio[ticker] = round(value[0], 3)
+            new_portfolio[ticker] = value[0]
             portfolio_value_usd += value[0] * close_value
 
         elif value[1].lower() == 'limit buy':
             # Implement later
             pass
 
-    new_portfolio['Cash'] = float(round(cash, 2))
+    new_portfolio['Cash'] = float(cash)
     portfolio_value_usd += cash  # add cash to the total portfolio value
-    portfolio_value_usd = float(round(portfolio_value_usd, 2))
+    portfolio_value_usd = float(portfolio_value_usd)
     #print("new portfolio: ", new_portfolio)
 
     return new_portfolio, portfolio_value_usd, commission

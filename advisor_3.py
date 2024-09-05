@@ -67,7 +67,7 @@ def dory_advisor(portfolio, date):
         print(f"close value of profit ticker {profit_ticker}: ", close_value)
         recommendations['Cash'] = portfolio['Cash']
         recommendation_state = "Buy"
-        how_much = round(float((portfolio_usd / close_value) - portfolio[profit_ticker]), 3)
+        how_much = float((portfolio_usd / close_value) - portfolio[profit_ticker])
         recommendations[profit_ticker] = [float(portfolio[profit_ticker]), recommendation_state, float(how_much)]
 
     # generate recommendations for other tickers
@@ -78,7 +78,7 @@ def dory_advisor(portfolio, date):
                 recommendations[ticker] = [float(portfolio[ticker]), recommendation_state]
             else:
                 recommendation_state = "Sell"
-                how_much = round(float(portfolio[ticker]), 3)
+                how_much = float(portfolio[ticker])
                 recommendations[ticker] = [float(portfolio[ticker]), recommendation_state, float(how_much)]
 
     return recommendations

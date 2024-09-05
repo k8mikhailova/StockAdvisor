@@ -1,6 +1,7 @@
 from config import API_KEY
 import requests
 import matplotlib.pyplot as plt
+import plotly.express as px
 import matplotlib.dates as mdates
 import streamlit as st
 import pandas as pd
@@ -70,12 +71,16 @@ def plot_simulation_results(selected_advisors, csv_path, period_label=None):
 
     # generate and display the summary table
     summary_df = summarize_portfolio(csv_path)
+    summary_df_formatted = summary_df.round(3)
     st.markdown("<h3 style='font-size: 18px;'>Summary of Portfolio Performance</h3>", unsafe_allow_html=True)
-    st.write(summary_df)
+    st.write(summary_df_formatted)
+
+    # format the DataFrame for display with up to 3 decimal places
+    df_formatted = df.round(3)
 
     # display the original dataframe as a table inside an expander
     with st.expander("View Original Data"):
-        st.write(df)
+        st.write(df_formatted)
 
 
 def plot_graphs(selected_advisors, csv_path, save_path=None, period_label=None):
@@ -282,10 +287,15 @@ def run_simulation(tickers_list, start_date, end_date, simulation_start_date, si
             period_start_date = today - timedelta(weeks=period)
             period_end_date = today
 
+            # convert to strings (e.g., "YYYY-MM-DD")
+            period_start_date_str = period_start_date.strftime("%Y-%m-%d")
+            period_end_date_str = period_end_date.strftime("%Y-%m-%d")
+
             # overwrite csv file
             csv_path = f"simulation_results_{file_index}.csv"
-            get_csv(tickers_list, start_date, end_date, period_start_date, period_end_date, initial_value,
-                    allocations, commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors, csv_path)
+            get_csv(tickers_list, start_date, end_date, period_start_date_str, period_end_date_str, initial_value,
+                    allocations, commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains,
+                    selected_advisors, csv_path)
             save_path = f"plot_{file_index}.png"
             period_label = f"Period: {period} Weeks"
             plot_graphs(selected_advisors, csv_path, save_path, period_label=period_label)

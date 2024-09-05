@@ -36,46 +36,60 @@ def dory_advisor(portfolio, date):
 
         open_value = date_data['open'].values[0]
         close_value = date_data['close'].values[0]
+        print(f"{ticker}: open value: {open_value}, close value: {close_value}")
 
-        change = ((close_value - open_value) / open_value) * 100  # calculate the percentage change
+        change = round(float(((close_value - open_value) / open_value) * 100), 3)  # calculate the percentage change
         portfolio_usd += portfolio[ticker] * close_value  # update total portfolio value in USD
         progression_dict[ticker] = change
+
+    print("progression dict: ", progression_dict)
 
     # find the ticker(s) with the maximum change
     max_change = max(progression_dict.values())
     max_tickers = [ticker for ticker, change in progression_dict.items() if change == max_change]
+    print("max change tickers:", max_tickers)
 
     if len(max_tickers) > 1:
-        # handle the edge case where multiple tickers have the same maximum change
-        max_tickers = [ticker for ticker in max_tickers if ticker != 'Cash']
-        profit_ticker = max_tickers[0]  # default to the first one if multiple are the same
+        # check if 'Cash' is one of the tickers with the maximum change
+        if 'Cash' in max_tickers:
+            profit_ticker = 'Cash'
+        else:
+            # if 'Cash' is not in the list, default to the first ticker in the list
+            profit_ticker = max_tickers[0]
     else:
+        # if there is only one ticker with the maximum change, select it
         profit_ticker = max_tickers[0]
 
     if profit_ticker == 'Cash':
         recommendations['Cash'] = portfolio['Cash']
     else:
         close_value = data[(data['date'] == pd.to_datetime(date)) & (data['ticker'] == profit_ticker)]['close'].values[0]
-        recommendations['Cash'] = 0
+        print(f"close value of profit ticker {profit_ticker}: ", close_value)
+        recommendations['Cash'] = portfolio['Cash']
         recommendation_state = "Buy"
-        how_much = round(float((portfolio_usd / close_value) - portfolio[ticker]), 3)
+        how_much = round(float((portfolio_usd / close_value) - portfolio[profit_ticker]), 3)
         recommendations[profit_ticker] = [float(portfolio[profit_ticker]), recommendation_state, float(how_much)]
 
     # generate recommendations for other tickers
     for ticker in tickers:
         if ticker != profit_ticker:
-            recommendation_state = "Sell"
-            how_much = round(float(portfolio[ticker]), 3)
-            recommendations[ticker] = [float(portfolio[ticker]), recommendation_state, float(how_much)]
+            if portfolio[ticker] == 0:
+                recommendation_state = "Do Nothing"
+                recommendations[ticker] = [float(portfolio[ticker]), recommendation_state]
+            else:
+                recommendation_state = "Sell"
+                how_much = round(float(portfolio[ticker]), 3)
+                recommendations[ticker] = [float(portfolio[ticker]), recommendation_state, float(how_much)]
 
     return recommendations
 
 '''
 # this if for debugging
 
-# Example usage:
-date = "2024-08-13"
-portfolio = {"Cash": 500, "AAPL": 3.123, "NVDA": 2.401, "MSFT": 0.23}
+# example usage:
+date = "2024-07-12"
+
+portfolio = {'Cash': 976.73, 'AAPL': 0.0, 'NVDA': 0.0}
 
 print(dory_advisor(portfolio, date))
 '''

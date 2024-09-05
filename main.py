@@ -89,8 +89,6 @@ else:
     simulation_end_date = st.sidebar.date_input("Simulation End Date", value=None)
     simulation_periods = st.sidebar.text_input("Periods for Simulation (in weeks, comma-separated)", "1,4,26")
 
-    periods = [int(period.strip()) for period in simulation_periods.split(',')]
-
     initial_value = st.sidebar.number_input("Initial Portfolio Value (USD)", 1000)
     commission_per_trade = st.sidebar.number_input("Commission per Trade", 0)
     # initialize the tax variables with default values
@@ -145,6 +143,8 @@ else:
     st.sidebar.write("")
     if st.sidebar.checkbox("Update Email Parameters"):
         allocations = st.session_state.saved_allocations
+        periods = [int(period.strip()) for period in simulation_periods.split(',')]
+
         # save parameters for emailing
         save_email_parameters(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, periods,
                               initial_value, commission_per_trade, include_tax, short_term_capital_gains,
@@ -178,17 +178,22 @@ else:
                                         period_label=f"From {simulation_start_date} to {simulation_end_date}")
 
             # check if simulation periods are provided
-            if periods:
+            if simulation_periods:
                 today = date.today()
+                periods = [int(period.strip()) for period in simulation_periods.split(',')]
 
                 for period in periods:
                     file_index += 1
                     period_start_date = today - timedelta(weeks=period)
                     period_end_date = today
 
+                    # convert to strings (e.g., "YYYY-MM-DD")
+                    period_start_date_str = period_start_date.strftime("%Y-%m-%d")
+                    period_end_date_str = period_end_date.strftime("%Y-%m-%d")
+
                     # overwrite csv file
                     csv_path = f"simulation_results_{file_index}.csv"
-                    get_csv(tickers_list, start_date, end_date, period_start_date, period_end_date, initial_value,
+                    get_csv(tickers_list, start_date, end_date, period_start_date_str, period_end_date_str, initial_value,
                             allocations, commission_per_trade, include_tax, short_term_capital_gains,
                             long_term_capital_gains, selected_advisors, csv_path)
                     plot_simulation_results(selected_advisors, csv_path, period_label=f"Period: {period} Weeks")

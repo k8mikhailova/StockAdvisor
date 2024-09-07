@@ -36,18 +36,15 @@ def dory_advisor(portfolio, date):
 
         open_value = date_data['open'].values[0]
         close_value = date_data['close'].values[0]
-        print(f"{ticker}: open value: {open_value}, close value: {close_value}")
 
         change = round(float(((close_value - open_value) / open_value) * 100), 3)  # calculate the percentage change
         portfolio_usd += portfolio[ticker] * close_value  # update total portfolio value in USD
         progression_dict[ticker] = change
 
-    print("progression dict: ", progression_dict)
 
     # find the ticker(s) with the maximum change
     max_change = max(progression_dict.values())
     max_tickers = [ticker for ticker, change in progression_dict.items() if change == max_change]
-    print("max change tickers:", max_tickers)
 
     if len(max_tickers) > 1:
         # check if 'Cash' is one of the tickers with the maximum change
@@ -64,7 +61,6 @@ def dory_advisor(portfolio, date):
         recommendations['Cash'] = portfolio['Cash']
     else:
         close_value = data[(data['date'] == pd.to_datetime(date)) & (data['ticker'] == profit_ticker)]['close'].values[0]
-        print(f"close value of profit ticker {profit_ticker}: ", close_value)
         recommendations['Cash'] = portfolio['Cash']
         recommendation_state = "Buy"
         how_much = float((portfolio_usd / close_value) - portfolio[profit_ticker])

@@ -71,8 +71,6 @@ def generate_email_content(recipient_email, png_csv_dict):
                     # add the image to the HTML content
                     html_content += f'<img src="cid:{img_name}" alt="{img_name}"><br>'
 
-                    print(f"Added image: {png_path}")
-
             except Exception as e:
                 print(f"Failed to include {png_path} in the email body: {e}")
 
@@ -87,6 +85,9 @@ def generate_email_content(recipient_email, png_csv_dict):
             except Exception as e:
                 print(f"Failed to include {csv_path} in the email body: {e}")
 
+        # add a horizontal divider between sections
+        html_content += '<hr>'
+
     # add the closing content
     html_content += """
                 <p>For a more detailed analysis or to adjust your tracked periods, please log in to StockAdvisor.</p>
@@ -97,7 +98,7 @@ def generate_email_content(recipient_email, png_csv_dict):
     # attach the HTML content to the email
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-    # Attach all image parts after the HTML content
+    # attach all image parts after the HTML content
     for img_part in image_parts:
         msg.attach(img_part)
 
@@ -152,7 +153,6 @@ def main():
                         png_csv_dict = run_simulation(tickers_list, start_date, end_date, simulation_start_date,
                                                   simulation_end_date, periods, initial_value, allocations, commission_per_trade,
                                                   include_tax, short_term_capital_gains, long_term_capital_gains, selected_advisors)
-                        print(png_csv_dict)
                         print("Simulation executed.")
 
                     # wait for a minute before checking again to avoid multiple executions

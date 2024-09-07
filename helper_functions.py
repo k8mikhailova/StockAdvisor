@@ -2,6 +2,7 @@ from config import API_KEY
 import requests
 import matplotlib.pyplot as plt
 import plotly.express as px
+import plotly.io as pio
 import matplotlib.dates as mdates
 import streamlit as st
 import pandas as pd
@@ -36,38 +37,29 @@ def validate_tickers(tickers):
 
 
 def plot_simulation_results(selected_advisors, csv_path, period_label=None):
-    # load the csv file into a dataframe and display it
+    # load the CSV file into a DataFrame
     df = pd.read_csv(csv_path)
 
-    # convert date column to datetime
-    df['Date'] = pd.to_datetime(df['Date']).dt.date  # convert to date only
+    # convert the 'Date' column to datetime
+    df['Date'] = pd.to_datetime(df['Date']).dt.date  # Convert to date only
 
-    # plot the portfolio value vs time for each advisor
+    # filter the DataFrame to include only the selected advisors
+    df_filtered = df[df['Advisor'].isin(selected_advisors)]
+
+    # create an interactive plot using Plotly
     st.header(f"{period_label if period_label else ''}")
-    plt.figure(figsize=(10, 6))
 
-    for advisor in selected_advisors:
-        advisor_df = df[df['Advisor'] == advisor]
-        plt.plot(advisor_df['Date'], advisor_df['Portfolio Value USD'], label=advisor)
+    # create a figure with Plotly for each selected advisor
+    fig = px.line(df_filtered, x='Date', y='Portfolio Value USD', color='Advisor',
+                  labels={'Portfolio Value USD': 'Portfolio Value (USD)', 'Date': 'Date'})
 
-    plt.xlabel('Date')
-    plt.ylabel('Portfolio Value (USD)')
-    plt.title(f'{period_label if period_label else ""}')
-    plt.legend()
+    # customize the layout
+    fig.update_layout(xaxis_title='Date',
+                      yaxis_title='Portfolio Value (USD)',
+                      xaxis=dict(tickformat='%Y-%m-%d'))
 
-    # format the date axis to prevent overcrowding
-    plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
-    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-
-    # set x-axis limits to start and end dates
-    plt.xlim(df['Date'].min(), df['Date'].max())
-
-    # manually set x-axis labels
-    date_range = df['Date'].unique()
-    step = max(1, len(date_range) // 10)  # adjust step to control the number of labels
-    plt.xticks(date_range[::step], rotation=45)
-
-    st.pyplot(plt)
+    # show the interactive plot in Streamlit
+    st.plotly_chart(fig)
 
     # generate and display the summary table
     summary_df = summarize_portfolio(csv_path)
@@ -79,8 +71,10 @@ def plot_simulation_results(selected_advisors, csv_path, period_label=None):
     df_formatted = df.round(3)
 
     # display the original dataframe as a table inside an expander
-    with st.expander("View Original Data"):
+    with st.expander("View original data"):
         st.write(df_formatted)
+
+    st.markdown("---")
 
 
 def plot_graphs(selected_advisors, csv_path, save_path=None, period_label=None):
@@ -97,7 +91,7 @@ def plot_graphs(selected_advisors, csv_path, save_path=None, period_label=None):
     df = pd.read_csv(csv_path)
 
     # convert date column to datetime
-    df['Date'] = pd.to_datetime(df['Date']).dt.date  # Convert to date only
+    df['Date'] = pd.to_datetime(df['Date']).dt.date  # convert to date only
 
     # create a figure for the plot
     plt.figure(figsize=(10, 6))
@@ -110,7 +104,7 @@ def plot_graphs(selected_advisors, csv_path, save_path=None, period_label=None):
     # labeling the plot
     plt.xlabel('Date')
     plt.ylabel('Portfolio Value (USD)')
-    plt.title(f'{period_label if period_label else ""}')
+    #plt.title(f'{period_label if period_label else ""}')
     plt.legend()
 
     # format the date axis to prevent overcrowding
@@ -383,12 +377,6 @@ def load_parameters():
         return {}
 
 
-'''
-# Example usage of summarize_portfolio function
-csv_file = 'simulation_results_3.csv'
-summary_df = summarize_portfolio(csv_file)
-print(summary_df)
-'''
 
 
 

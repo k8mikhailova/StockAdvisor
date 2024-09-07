@@ -103,8 +103,6 @@ def rec_calculations(date, rec, commission_per_trade):
     except Exception as e:
         raise ValueError(f"Error reading CSV file: {e}")
 
-    #print("rec: ", rec)
-
     portfolio_value_usd = 0
     cash = rec.get("Cash", 0)
     new_portfolio = {"Cash": cash}
@@ -124,7 +122,6 @@ def rec_calculations(date, rec, commission_per_trade):
         if value[1].lower() == 'do nothing':
             new_portfolio[ticker] = value[0]
             portfolio_value_usd += value[0] * close_value
-            print("new portfolio when do nothing: ", new_portfolio)
 
         elif value[1].lower() == 'buy':
             new_shares = value[0] + value[2]
@@ -132,7 +129,6 @@ def rec_calculations(date, rec, commission_per_trade):
             cash -= value[2] * close_value
             new_portfolio[ticker] = new_shares
             commission += commission_per_trade
-            print("new portfolio when buy: ", new_portfolio)
 
         elif value[1].lower() == 'sell':
             remaining_shares = value[0] - value[2]
@@ -140,20 +136,18 @@ def rec_calculations(date, rec, commission_per_trade):
             portfolio_value_usd += remaining_shares * close_value
             new_portfolio[ticker] = remaining_shares
             commission += commission_per_trade
-            print("new portfolio when sell: ", new_portfolio)
 
         elif value[1].lower() == 'hold':
             new_portfolio[ticker] = value[0]
             portfolio_value_usd += value[0] * close_value
 
         elif value[1].lower() == 'limit buy':
-            # Implement later
+            # implement later
             pass
 
     new_portfolio['Cash'] = float(cash)
     portfolio_value_usd += cash  # add cash to the total portfolio value
     portfolio_value_usd = float(portfolio_value_usd)
-    #print("new portfolio: ", new_portfolio)
 
     return new_portfolio, portfolio_value_usd, commission
 
@@ -189,13 +183,11 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
 
     for advisor in advisors_list:
         portfolio = get_portfolio_shares(simulation_start_date, portfolio_allocations, portfolio_value)
-        #print(f"portfolio for {advisor}: ", portfolio)
         portfolio_value_usd = portfolio_value
 
         # initialize the result with the initial portfolio state
         initial_result = {'Date': simulation_start_date, 'Advisor': 'Initial', 'Portfolio Value USD': portfolio_value,
                           'Cash': portfolio['Cash'], **portfolio}
-        #print(f"initial result for {advisor}: ", initial_result)
 
         # fetch closing prices for the initial date
         date_data = historical_data[historical_data['date'] == pd.to_datetime(simulation_start_date)]
@@ -220,9 +212,7 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
 
             if is_open(date_str):
                 rec = globals()[f"{advisor}_advisor"](portfolio, date_str)
-                print(f"rec for {single_date} for {advisor}: ", rec)
                 portfolio, portfolio_value_usd, commission = rec_calculations(date_str, rec, commission_per_trade)
-                print("portfolio: ", portfolio)
                 date_data = historical_data[historical_data['date'] == pd.to_datetime(date_str)]
                 result.update({'Portfolio Value USD': portfolio_value_usd})
 
@@ -235,10 +225,8 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
                         result.update({ticker+' total': total})
                         result.update({'Cash': portfolio['Cash']})
                 previous_result = result
-                #print("result: ", result)
                 all_results.append(result)
             else:
-                #print("previous result: ", previous_result)
                 result = previous_result.copy()
                 result['Date'] = date_str
                 all_results.append(result)
@@ -247,7 +235,7 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
     df.to_csv(csv_path, index=False)
 
 
-#'''
+'''
 # get_csv debugging
 
 tickers_list = ["AAPL", "NVDA"]
@@ -270,7 +258,7 @@ print(get_csv(tickers_list, historical_start_date, historical_end_date, simulati
               portfolio_value, portfolio_allocations, commission_per_trade, include_tax, short_term_capital_gains,
               long_term_capital_gains, advisors_list, csv_path))
 
-#'''
+'''
 
 '''
 # get_portfolio debugging

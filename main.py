@@ -1,8 +1,42 @@
+import hashlib
+import importlib
 import os
 import shutil
+import sys
 import tempfile
 import streamlit as st
 from datetime import date, timedelta
+
+# The app's own modules, in dependency order.
+LOCAL_MODULES = ["config", "data_fetcher", "advisor_1", "advisor_2", "advisor_3", "simulator", "helper_functions",
+                 "ui", "demo_tour"]
+
+
+def reload_changed_modules():
+    """
+    A running Streamlit server keeps imported modules in memory. When a deployment pulls new code, this script
+    could otherwise run against older versions of its helper modules (for example an AttributeError for a function
+    that only exists in the new version). If any module changed on disk since it was loaded, reload all of them in
+    dependency order, so they never mix versions.
+    """
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    digests = {}
+    for name in LOCAL_MODULES:
+        with open(os.path.join(app_dir, f"{name}.py"), "rb") as file:
+            digests[name] = hashlib.sha256(file.read()).hexdigest()
+    loaded = [sys.modules.get(name) for name in LOCAL_MODULES]
+    if any(module is not None and getattr(module, "_source_digest", None) != digests[name]
+           for name, module in zip(LOCAL_MODULES, loaded)):
+        for name, module in zip(LOCAL_MODULES, loaded):
+            if module is not None:
+                importlib.reload(module)
+    for name in LOCAL_MODULES:
+        module = importlib.import_module(name)
+        module._source_digest = digests[name]
+
+
+reload_changed_modules()
+
 from config import DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, DEMO_MODE, HISTORICAL_DATA_PATH
 from helper_functions import (validate_tickers, plot_simulation_results, read_and_display, save_email_settings,
                               save_email_parameters)

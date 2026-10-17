@@ -12,8 +12,18 @@ A comprehensive stock portfolio simulation and advisory tool built with Streamli
 - **Portfolio Simulation**: Backtest strategies over custom time periods
 - **Interactive Dashboard**: Streamlit-based UI for easy parameter configuration
 - **Email Automation**: Automated daily reports with performance charts
-- **Tax Calculations**: Optional capital gains tax considerations
-- **Commission Modeling**: Realistic trading cost simulation
+- **Tax and Commission Inputs**: Capital gains tax rates and commission per trade are collected with the simulation
+  parameters (the simulation engine does not apply them yet)
+- **Public Demo Mode**: Runs on bundled historical data with no API keys, no external requests and no emails
+
+## Live Demo (demo mode)
+
+By default the app runs in **demo mode**: it uses the historical daily prices for AAPL and NVDA bundled in `data.csv`
+(2023-01-03 to 2024-09-05) and the original simulation engine. Results are simulations on past data, not live market
+information or investment advice. Demo mode makes no API requests, never sends emails, keeps every visitor's inputs and
+results in their own session (in a private temporary folder) and never writes to the repository's files.
+
+Streamlit Community Cloud settings: branch `stockadvisor-public-demo`, main file `main.py`, Python 3.12, no secrets.
 
 ## Installation
 
@@ -28,13 +38,13 @@ cd StockAdvisor
 pip install -r requirements.txt
 ```
 
-3. Set up your API key:
-   - Get a free API key from [Financial Modeling Prep](https://financialmodelingprep.com/)
-   - Replace the `API_KEY` in `config.py` with your key
+3. Live mode (optional, private use only). Credentials are never stored in the code. Copy
+   `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` (git-ignored), or set environment variables:
+   - `STOCKADVISOR_MODE = "live"` and `FMP_API_KEY` from [Financial Modeling Prep](https://financialmodelingprep.com/)
+     to fetch live data
+   - `EMAIL_ADDRESS` and `EMAIL_PASSWORD` (a Gmail app password) for the `to_email.py` automation script
 
-4. Configure email settings (optional):
-   - Update `EMAIL_ADDRESS` and `EMAIL_PASSWORD` in `config.py`
-   - Or set environment variables: `EMAIL_ADDRESS` and `EMAIL_PASSWORD`
+   Without these settings the app runs in demo mode.
 
 ## Usage
 
@@ -83,20 +93,9 @@ Configure automated reporting:
 
 ## Configuration
 
-### API Configuration
-```python
-# config.py
-API_KEY = 'your-financial-modeling-prep-api-key'
-```
-
-### Email Settings
-```python
-# config.py
-EMAIL_ADDRESS = 'your-email@gmail.com'
-EMAIL_PASSWORD = 'your-app-password'
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 465
-```
+### API and Email Credentials
+`config.py` reads `FMP_API_KEY`, `EMAIL_ADDRESS` and `EMAIL_PASSWORD` from environment variables or Streamlit secrets
+(see `.streamlit/secrets.toml.example`). Never put credentials in `config.py`.
 
 ### Default Times
 ```python
@@ -113,7 +112,14 @@ Key packages include:
 - `requests`: API communication
 - `smtplib`: Email functionality
 
-See `requirements.txt` for complete list.
+See `requirements.txt` for the complete list (tested with Python 3.12).
+
+## Tests
+
+```bash
+pip install -r requirements.txt pytest
+python -m pytest tests
+```
 
 ## Project Structure
 
@@ -129,7 +135,8 @@ StockAdvisor/
 ├── config.py             # Configuration settings
 ├── to_email.py           # Email automation
 ├── requirements.txt      # Python dependencies
-├── email_settings.json   # Email configuration storage
+├── email_settings.example.json  # Example email settings (email_settings.json is created in live mode, git-ignored)
+├── tests/                # Streamlit AppTest checks for demo mode
 ├── parameters.json       # Simulation parameters storage
 └── data.csv             # Historical stock data cache
 ```

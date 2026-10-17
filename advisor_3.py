@@ -1,7 +1,9 @@
 import pandas as pd
+from config import HISTORICAL_DATA_PATH
+from data_fetcher import load_historical_data
 
 
-def dory_advisor(portfolio, date):
+def dory_advisor(portfolio, date, data_path=HISTORICAL_DATA_PATH):
     """
     Dory advisor recommends actions based on historical stock data for a specific date. Dory recommends buying the stock
     with the highest positive change, otherwise, sell the other stocks if the user has investments in them.
@@ -9,6 +11,7 @@ def dory_advisor(portfolio, date):
     Parameters:
         portfolio (dict): a dictionary where keys are stock tickers and values are amounts of stocks
         date (str): the date for which the recommendation is needed in 'YYYY-MM-DD' format
+        data_path (str): path to the historical data csv
 
     Returns:
         dict: a dictionary with recommendations for each ticker in the portfolio, including previous values
@@ -18,8 +21,7 @@ def dory_advisor(portfolio, date):
     tickers = [ticker for ticker in portfolio if ticker != 'Cash']
 
     try:
-        data = pd.read_csv("data.csv")
-        data['date'] = pd.to_datetime(data['date'])  # ensure date column is datetime
+        data = load_historical_data(data_path)
     except FileNotFoundError:
         raise FileNotFoundError("Historical data file not found.")
     except Exception as e:

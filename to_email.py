@@ -106,6 +106,10 @@ def generate_email_content(recipient_email, png_csv_dict):
 
 
 def main():
+    if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
+        print("EMAIL_ADDRESS and EMAIL_PASSWORD must be set as environment variables or Streamlit secrets.")
+        return
+
     png_csv_dict = {}
 
     while True:

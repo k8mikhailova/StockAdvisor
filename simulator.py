@@ -1,11 +1,12 @@
 import pandas as pd
-from data_fetcher import fetch_historical_data_and_save
+from config import HISTORICAL_DATA_PATH
+from data_fetcher import fetch_historical_data_and_save, load_historical_data
 from advisor_1 import always_cash_advisor
 from advisor_2 import always_hold_advisor
 from advisor_3 import dory_advisor
 
 
-def is_open(date):
+def is_open(date, data_path=HISTORICAL_DATA_PATH):
     """
     Check if the market is open on a specific date by checking the availability of data in the csv file
 
@@ -20,8 +21,7 @@ def is_open(date):
     # fetch historical data for the given date
     try:
         # load the historical data
-        data = pd.read_csv("data.csv")
-        data['date'] = pd.to_datetime(data['date'])  # ensure date column is datetime
+        data = load_historical_data(data_path)
 
         # check if there's data for the specified date
         date_data = data[data['date'] == date]
@@ -36,7 +36,7 @@ def is_open(date):
         return False
 
 
-def get_portfolio_shares(start_date, portfolio_allocations, portfolio_value):
+def get_portfolio_shares(start_date, portfolio_allocations, portfolio_value, data_path=HISTORICAL_DATA_PATH):
     """
     Converts portfolio allocations into shares using historical data. If historical data for the start_date is missing,
     uses the last available data before the start_date
@@ -53,8 +53,7 @@ def get_portfolio_shares(start_date, portfolio_allocations, portfolio_value):
     start_date = pd.to_datetime(start_date)
 
     # load the historical data
-    historical_data = pd.read_csv("data.csv")
-    historical_data['date'] = pd.to_datetime(historical_data['date'])  # ensure date column is datetime
+    historical_data = load_historical_data(data_path)
 
     # convert percentages to USD
     portfolio_usd = {ticker: (percentage / 100) * portfolio_value for ticker, percentage in
@@ -81,7 +80,7 @@ def get_portfolio_shares(start_date, portfolio_allocations, portfolio_value):
     return portfolio_shares
 
 
-def rec_calculations(date, rec, commission_per_trade):
+def rec_calculations(date, rec, commission_per_trade, data_path=HISTORICAL_DATA_PATH):
     """
     Processes advisor recommendations and updates the portfolio
 
@@ -96,8 +95,7 @@ def rec_calculations(date, rec, commission_per_trade):
 
     # retrieve historical data to get the close value
     try:
-        data = pd.read_csv("data.csv")
-        data['date'] = pd.to_datetime(data['date'])
+        data = load_historical_data(data_path)
     except FileNotFoundError:
         raise FileNotFoundError("Historical data file not found.")
     except Exception as e:
@@ -154,7 +152,7 @@ def rec_calculations(date, rec, commission_per_trade):
 
 def get_csv(tickers_list, historical_start_date, historical_end_date, simulation_start_date, simulation_end_date,
             portfolio_value, portfolio_allocations, commission_per_trade, include_tax, short_term_capital_gains,
-            long_term_capital_gains, advisors_list, csv_path):
+            long_term_capital_gains, advisors_list, csv_path, data_path=HISTORICAL_DATA_PATH, fetch_data=True):
     """
     Runs the simulation and saves the results to a csv file
 
@@ -172,17 +170,20 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
         long_term_capital_gains (int)
         advisors_list (list): list of advisor functions to use
         csv_path (str): a path where the csv will be stored
+        data_path (str): path to the historical data csv
+        fetch_data (bool): fetch fresh data from the API into data_path first (live mode). In demo mode this is False
+                           and the bundled historical data is used as is
 
     Returns:
         str: the path to the generated csv file
     """
-    fetch_historical_data_and_save(historical_start_date, historical_end_date, tickers_list)
+    if fetch_data:
+        fetch_historical_data_and_save(historical_start_date, historical_end_date, tickers_list, data_path)
     all_results = []
-    historical_data = pd.read_csv("data.csv")
-    historical_data['date'] = pd.to_datetime(historical_data['date'])
+    historical_data = load_historical_data(data_path)
 
     for advisor in advisors_list:
-        portfolio = get_portfolio_shares(simulation_start_date, portfolio_allocations, portfolio_value)
+        portfolio = get_portfolio_shares(simulation_start_date, portfolio_allocations, portfolio_value, data_path)
         portfolio_value_usd = portfolio_value
 
         # initialize the result with the initial portfolio state
@@ -210,9 +211,10 @@ def get_csv(tickers_list, historical_start_date, historical_end_date, simulation
                 'Advisor': advisor
             }
 
-            if is_open(date_str):
-                rec = globals()[f"{advisor}_advisor"](portfolio, date_str)
-                portfolio, portfolio_value_usd, commission = rec_calculations(date_str, rec, commission_per_trade)
+            if is_open(date_str, data_path):
+                rec = globals()[f"{advisor}_advisor"](portfolio, date_str, data_path)
+                portfolio, portfolio_value_usd, commission = rec_calculations(date_str, rec, commission_per_trade,
+                                                                              data_path)
                 date_data = historical_data[historical_data['date'] == pd.to_datetime(date_str)]
                 result.update({'Portfolio Value USD': portfolio_value_usd})
 

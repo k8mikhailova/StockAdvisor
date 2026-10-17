@@ -1,4 +1,4 @@
-from config import API_KEY
+from config import API_KEY, DEMO_MODE, HISTORICAL_DATA_PATH
 import requests
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -10,24 +10,34 @@ from datetime import datetime, date, timedelta
 import json
 from config import SETTINGS_FILE_PATH, PARAMETERS_FILE_PATH
 from simulator import get_csv
+from data_fetcher import load_historical_data
 
 
-def validate_tickers(tickers):
+def validate_tickers(tickers, data_path=HISTORICAL_DATA_PATH):
     """
-    Validate ticker symbols using the FMP API.
+    Validate ticker symbols using the FMP API. In demo mode, tickers are validated against the bundled historical data
+    instead, so no API requests are made.
 
     Parameters:
         tickers (list): List of ticker symbols to validate.
+        data_path (str): path to the historical data csv used in demo mode
 
     Returns:
         tuple: A tuple containing a list of valid tickers and a list of invalid tickers.
     """
-    base_url = f"https://financialmodelingprep.com/api/v3/historical-price-full/"
     valid_tickers = []
     invalid_tickers = []
 
+    if DEMO_MODE:
+        available_tickers = set(load_historical_data(data_path)['ticker'].unique())
+        for ticker in tickers:
+            (valid_tickers if ticker in available_tickers else invalid_tickers).append(ticker)
+        return valid_tickers, invalid_tickers
+
+    base_url = f"https://financialmodelingprep.com/api/v3/historical-price-full/"
+
     for ticker in tickers:
-        response = requests.get(f"{base_url}/{ticker}?apikey={API_KEY}")
+        response = requests.get(f"{base_url}/{ticker}?apikey={API_KEY}", timeout=30)
         if response.status_code == 200 and response.json():
             valid_tickers.append(ticker)
         else:
@@ -142,10 +152,15 @@ def load_json_file(file_path):
         return {}
 
 
-def read_and_display(display_area):
-    """Reads settings from the JSON files and displays them in the specified area."""
-    settings = load_json_file(SETTINGS_FILE_PATH)
-    parameters = load_json_file(PARAMETERS_FILE_PATH)
+def read_and_display(display_area, settings=None, parameters=None):
+    """
+    Reads settings from the JSON files and displays them in the specified area. In demo mode the settings and
+    parameters are passed in from the visitor's session instead of being read from the shared files.
+    """
+    if settings is None:
+        settings = load_json_file(SETTINGS_FILE_PATH)
+    if parameters is None:
+        parameters = load_json_file(PARAMETERS_FILE_PATH)
 
     status = settings.get("status", "").lower()
     email = settings.get("email", "")
@@ -163,7 +178,7 @@ def read_and_display(display_area):
         end_date = parameters.get("end_date", "")
         portfolio_value = parameters.get("portfolio_value", 1000)
         periods = parameters.get("periods", [])
-        commission_per_trade = parameters.get("commission_per_trade", 0)
+        commission_per_trade = parameters.get("commisson_per_trade", parameters.get("commission_per_trade", 0))
         include_tax = parameters.get("tax", False)
         short_term_capital_gains_tax_rate = parameters.get("short_term_capital_gains_tax_rate", 0)
         long_term_capital_gains_tax_rate = parameters.get("long_term_capital_gains_tax_rate", 0)
@@ -202,8 +217,8 @@ def read_and_display(display_area):
         display_area.write("No active settings found.")
 
 
-def save_email_settings(email, calculations_time, email_time, status):
-    """Saves the settings to the JSON file."""
+def save_email_settings(email, calculations_time, email_time, status, write_file=True):
+    """Saves the settings to the JSON file (unless write_file is False, as in demo mode) and returns them."""
     settings = {
         "email": email,
         "calculations_time": calculations_time.strftime('%H:%M:%S') if status == "Active" else "",
@@ -211,13 +226,17 @@ def save_email_settings(email, calculations_time, email_time, status):
         "status": status
     }
 
-    with open(SETTINGS_FILE_PATH, "w") as file:
-        json.dump(settings, file, indent=4)
+    if write_file:
+        with open(SETTINGS_FILE_PATH, "w") as file:
+            json.dump(settings, file, indent=4)
+
+    return settings
 
 
 def save_email_parameters(tickers, start_date, end_date, sim_start_date, sim_end_date, periods, portfolio_value,
-                          commission, tax, short_cap_gains, long_cap_gains, portfolio_allocations, advisors):
-    """Saves the settings to the JSON file."""
+                          commission, tax, short_cap_gains, long_cap_gains, portfolio_allocations, advisors,
+                          write_file=True):
+    """Saves the parameters to the JSON file (unless write_file is False, as in demo mode) and returns them."""
     # convert dates to strings, handle NoneType
     start_date_str = start_date.strftime('%Y-%m-%d')
     end_date_str = end_date.strftime('%Y-%m-%d')
@@ -241,8 +260,11 @@ def save_email_parameters(tickers, start_date, end_date, sim_start_date, sim_end
         "advisors": advisors
     }
 
-    with open(PARAMETERS_FILE_PATH, "w") as file:
-        json.dump(parameters, file, indent=4)
+    if write_file:
+        with open(PARAMETERS_FILE_PATH, "w") as file:
+            json.dump(parameters, file, indent=4)
+
+    return parameters
 
 
 def run_simulation(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date,

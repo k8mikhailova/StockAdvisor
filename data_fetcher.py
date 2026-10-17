@@ -1,22 +1,43 @@
+import os
 import requests
 import pandas as pd
-from config import API_KEY
+from config import API_KEY, HISTORICAL_DATA_PATH
+
+_data_cache = {}
 
 
-def fetch_historical_data_and_save(start_date, end_date=None, tickers=None):
+def load_historical_data(data_path=HISTORICAL_DATA_PATH):
+    """
+    Load the historical data csv into a DataFrame. The parsed file is cached per path and modification time, so the
+    simulator does not re-read the csv for every simulated day. A copy is returned so callers cannot change the cache.
+    """
+    key = (os.path.abspath(data_path), os.path.getmtime(data_path))
+    if key not in _data_cache:
+        data = pd.read_csv(data_path)
+        data['date'] = pd.to_datetime(data['date'])  # ensure date column is datetime
+        _data_cache.clear()
+        _data_cache[key] = data
+    return _data_cache[key].copy()
+
+
+def fetch_historical_data_and_save(start_date, end_date=None, tickers=None, output_path=HISTORICAL_DATA_PATH):
     """
     Fetch historical stock data from Financial Modeling Prep API for multiple tickers
     between start_date and end_date or for a single day if end_date is not provided,
-    and save the results to a file named 'data.csv'.
+    and save the results to output_path (by default 'data.csv'). Only used in live mode.
 
     Parameters:
         start_date (str): the start date for data collection in 'YYYY-MM-DD' format
         end_date (str, optional): the end date for data collection in 'YYYY-MM-DD' format
         tickers (list, optional): a list of stock ticker symbols
+        output_path (str, optional): where to save the fetched data
 
     Returns:
         None
     """
+
+    if not API_KEY:
+        raise RuntimeError("FMP_API_KEY is not configured. Set it as an environment variable or Streamlit secret.")
 
     if end_date is None:
         end_date = pd.to_datetime(start_date) + pd.DateOffset(days=1)
@@ -34,7 +55,7 @@ def fetch_historical_data_and_save(start_date, end_date=None, tickers=None):
 
     for ticker in tickers:
         url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{ticker}?apikey={API_KEY}"
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
 
         if response.status_code == 200:
             data = response.json()
@@ -58,8 +79,8 @@ def fetch_historical_data_and_save(start_date, end_date=None, tickers=None):
 
     if all_data:
         result_df = pd.concat(all_data, ignore_index=True)
-        result_df.to_csv("data.csv", index=False)
-        print(f"Data saved to data.csv for date range: {start_date.date()} to {end_date.date()}")
+        result_df.to_csv(output_path, index=False)
+        print(f"Data saved to {output_path} for date range: {start_date.date()} to {end_date.date()}")
     else:
         print(f"No data fetched for date range: {start_date.date()} to {end_date.date()}")
 

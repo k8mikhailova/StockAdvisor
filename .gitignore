@@ -1,0 +1,14 @@
+# secrets - never commit
+.streamlit/secrets.toml
+.env
+
+# runtime settings written by the app in live mode (may contain an email address)
+email_settings.json
+
+# python / IDE
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+.DS_Store

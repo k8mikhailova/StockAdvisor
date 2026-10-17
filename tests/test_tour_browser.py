@@ -16,7 +16,7 @@ sync_api = pytest.importorskip("playwright.sync_api")
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DESKTOP = {"width": 1400, "height": 900}
 PHONE = {"width": 390, "height": 844}
-WELCOME = "Want a quick walkthrough?"
+WELCOME = "Want a quick walkthrough of the settings and strategies?"
 
 HIGHLIGHT_BOX = """() => { const a = document.querySelector('.driver-active-element');
   if (!a) return null; const r = a.getBoundingClientRect();
@@ -83,7 +83,7 @@ class Visitor:
 
     def open(self):
         self.page.goto(self.url, wait_until="networkidle")
-        self.page.get_by_text("Demo mode.").wait_for(timeout=60000)
+        self.page.get_by_text("Your simulation").wait_for(timeout=60000)
         self.page.wait_for_timeout(2500)  # let the tour helper report the viewport
 
     def button(self, name):
@@ -119,11 +119,13 @@ def visitor(browser, app_url):
         v.close()
 
 
-TITLES = ["Two pages", "Choose stocks and data", "Pick what to test", "Set up the portfolio", "Compare strategies",
-          "Run a simulation", "You're all set!"]
+TITLES = ["Two pages", "Set up the portfolio", "Choose stocks and data", "Pick what to test", "Compare strategies",
+          "Check and run", "You're all set!"]
 TITLES_WITH_RESULTS = TITLES[:-1] + ["Read the results"] + TITLES[-1:]
-TARGETS = ["st-key-tour_pages", "st-key-tour_inputs", "st-key-tour_simulation", "st-key-tour_portfolio",
-           "st-key-tour_advisors", "st-key-tour_run"]  # the sidebar steps, in order
+# highlighted container and whether it is in the sidebar, for every step except the finish card
+TARGETS = [("st-key-tour_pages", True), ("st-key-tour_portfolio", True), ("st-key-tour_inputs", True),
+           ("st-key-tour_simulation", True), ("st-key-tour_advisors", True), ("st-key-tour_run", False)]
+RESULTS_TITLE = "Simulation results"
 
 SIDEBAR_INPUTS = """() => [...document.querySelectorAll('[data-testid="stSidebar"] input')]
   .map(e => e.type === 'checkbox' ? e.checked : e.value)"""
@@ -147,7 +149,7 @@ def test_desktop_spotlight_tour(visitor):
     v = visitor()
     p = v.page
     assert p.get_by_text(WELCOME).is_visible()
-    assert v.button("Run Simulation").is_enabled()  # the app is usable while the welcome card is shown
+    assert v.button("Run simulation").is_enabled()  # the app is usable while the welcome card is shown
     inputs_before = p.evaluate(SIDEBAR_INPUTS)
 
     v.button("Start tour").click()
@@ -164,18 +166,20 @@ def test_desktop_spotlight_tour(visitor):
         assert v.popover_progress() == f"{i + 1} of {len(TITLES)}"
         assert p.locator(".driver-popover-title").inner_text() == title
         if i < len(TARGETS):
-            # each sidebar step highlights its own control, scrolled into view
-            assert highlighted_key(p) == TARGETS[i]
-            assert_highlight_on_screen(p)
+            # each step highlights its own section, scrolled into view
+            key, in_sidebar = TARGETS[i]
+            assert highlighted_key(p) == key
+            assert_highlight_on_screen(p, in_sidebar)
         else:
             assert highlighted_key(p) is None  # the finish card highlights nothing
         if title == "Set up the portfolio":
-            assert p.locator(".driver-active-element").get_by_text("Portfolio Allocations").count() >= 1
+            assert p.locator(".driver-active-element").get_by_text("Allocations (%)").count() == 1
         if title == "Compare strategies":
             text = p.locator(".driver-popover-description").inner_text()
             assert "Always Cash" in text and "Always Hold" in text and "not a prediction" in text
-        if title == "Run a simulation":
+        if title == "Check and run":
             assert "chart of portfolio value" in p.locator(".driver-popover-description").inner_text()
+            assert p.locator(".driver-active-element").get_by_role("button", name="Run simulation").count() == 1
 
     assert p.locator(".driver-popover-next-btn").inner_text() == "Done"
     p.locator(".driver-popover-next-btn").click()
@@ -185,8 +189,6 @@ def test_desktop_spotlight_tour(visitor):
     p.wait_for_timeout(1000)
     assert p.evaluate(SIDEBAR_INPUTS) == inputs_before
     assert p.locator(".js-plotly-plot").count() == 0
-    assert p.locator('[data-testid="stExpanderDetails"]').count() == 0 or \
-        not p.get_by_text("Update Stocks").is_visible()  # the allocations expander stays closed
 
     # the welcome card does not come back after a refresh, but the tour can be replayed
     v.open()
@@ -220,8 +222,8 @@ def test_results_step_highlights_results(visitor):
     v = visitor()
     p = v.page
     v.button("No thanks").click()
-    v.button("Run Simulation").click()
-    p.get_by_text("Period: 26 Weeks (ending 2024-09-05)").wait_for(timeout=120000)
+    v.button("Run simulation").click()
+    p.get_by_text(RESULTS_TITLE).wait_for(timeout=120000)
 
     v.button("Take a tour").click()
     v.popover_progress()
@@ -231,7 +233,7 @@ def test_results_step_highlights_results(visitor):
     assert p.locator(".driver-popover-title").inner_text() == "Read the results"
     assert highlighted_key(p) == "st-key-tour_results"
     highlighted = p.locator(".driver-active-element")
-    assert highlighted.get_by_text("From 2024-07-10 to 2024-07-18").count() == 1  # the first result section
+    assert highlighted.get_by_role("tab", name="Jul 10 – Jul 18, 2024").count() == 1  # the result tabs
     box = p.evaluate(HIGHLIGHT_BOX)
     assert box["left"] > p.locator('[data-testid="stSidebar"]').bounding_box()["width"]
     assert box["top"] < box["vh"] and box["bottom"] > 0
@@ -276,7 +278,8 @@ def test_narrow_viewport_uses_walkthrough(visitor):
     assert p.locator(".js-plotly-plot").count() == 0
     assert p.evaluate(SIDEBAR_INPUTS) == inputs_before
 
-    # skip from the middle of the walkthrough
+    # skip from the middle of the walkthrough (on a phone, "Take a tour" is at the bottom of the sidebar)
+    open_phone_sidebar(p)
     v.button("Take a tour").click()
     dialog = p.get_by_role("dialog")
     dialog.get_by_role("button", name="Next").click()
@@ -289,28 +292,95 @@ def test_narrow_viewport_uses_walkthrough(visitor):
     v.assert_clean()
 
 
+def open_phone_sidebar(page):
+    page.get_by_test_id("stExpandSidebarButton").click()
+    page.wait_for_timeout(800)
+
+
 def test_narrow_viewport_walkthrough_with_results(visitor):
     v = visitor(PHONE)
     p = v.page
     v.button("No thanks").click()
-    p.get_by_test_id("stExpandSidebarButton").click()  # open the sidebar to run a simulation, as a visitor would
-    v.button("Run Simulation").click()
-    p.get_by_test_id("stSidebarCollapseButton").locator("button").click()
-    p.get_by_text("Period: 26 Weeks (ending 2024-09-05)").wait_for(timeout=120000)
+    v.button("Run simulation").click()  # in the main area, no need to open the sidebar
+    p.get_by_text(RESULTS_TITLE).wait_for(timeout=120000)
     p.wait_for_timeout(1500)
+    open_phone_sidebar(p)
     v.button("Take a tour").click()
     run_walkthrough(v, TITLES_WITH_RESULTS)
+    assert p.locator(".js-plotly-plot").count() == 4
     v.assert_clean()
+
+
+def results_heading_in_view(page):
+    box = page.get_by_role("heading", name=RESULTS_TITLE).bounding_box()
+    return box is not None and 0 <= box["y"] < page.viewport_size["height"] / 2
+
+
+@pytest.mark.parametrize("viewport", [DESKTOP, PHONE], ids=["desktop", "phone"])
+def test_run_scrolls_to_results_and_settings_update_summary(visitor, viewport):
+    v = visitor(viewport)
+    p = v.page
+    v.button("No thanks").click()
+    if viewport is PHONE:
+        open_phone_sidebar(p)
+    value = p.get_by_label("Initial portfolio value (USD)")
+    value.fill("2500")
+    value.press("Enter")
+    p.get_by_test_id("stMetric").filter(has_text="$2,500").wait_for(timeout=10000)
+    if viewport is PHONE:
+        p.get_by_test_id("stSidebarCollapseButton").locator("button").click()
+        p.wait_for_timeout(800)
+
+    v.button("Run simulation").click()
+    p.get_by_text(RESULTS_TITLE).wait_for(timeout=120000)
+    for _ in range(20):  # the page scrolls smoothly to the results
+        if results_heading_in_view(p):
+            break
+        p.wait_for_timeout(250)
+    assert results_heading_in_view(p)
+    assert p.locator(".js-plotly-plot").count() == 4
+    assert p.get_by_role("tab").count() == 4
+    p.get_by_role("tab", name="Last 26 weeks").click()
+    p.wait_for_timeout(500)
+    assert p.get_by_text("of $2,500, tested with").is_visible()  # what was simulated
+    v.assert_clean()
+
+
+def test_reset_demo_restores_defaults_on_phone(visitor):
+    v = visitor(PHONE)
+    p = v.page
+    v.button("No thanks").click()
+    open_phone_sidebar(p)
+    value = p.get_by_label("Initial portfolio value (USD)")
+    value.fill("4000")
+    value.press("Enter")
+    p.get_by_test_id("stMetric").filter(has_text="$4,000").wait_for(timeout=10000)
+    v.button("Reset demo").click()
+    p.get_by_test_id("stMetric").filter(has_text="$1,000").wait_for(timeout=10000)
+    assert p.get_by_text(WELCOME).count() == 0  # the tour choice is kept
+    v.assert_clean()
+
+
+def test_tour_cards_follow_dark_theme(browser, app_url):
+    context = browser.new_context(viewport=DESKTOP, color_scheme="dark")
+    p = context.new_page()
+    p.goto(app_url, wait_until="networkidle")
+    p.get_by_text("Your simulation").wait_for(timeout=60000)
+    p.wait_for_timeout(2500)
+    p.get_by_role("button", name="Start tour").click()
+    p.locator(".driver-popover").wait_for(timeout=20000)
+    background = p.locator(".driver-popover").evaluate("e => getComputedStyle(e).backgroundColor")
+    assert background == "rgb(38, 39, 48)"
+    context.close()
 
 
 def test_collapsed_sidebar_on_desktop_uses_walkthrough(visitor):
     v = visitor()
     p = v.page
-    v.button("No thanks").click()
     p.get_by_test_id("stSidebar").hover()
     p.get_by_test_id("stSidebarCollapseButton").locator("button").click()
     p.wait_for_timeout(2000)
-    v.button("Take a tour").click()
+    v.button("Start tour").click()  # from the welcome card in the main area
     run_walkthrough(v)
     v.assert_clean()
 
@@ -338,8 +408,8 @@ def test_app_works_when_tour_component_fails_to_load(visitor):
     p = v.page
     v.button("Start tour").click()
     p.wait_for_timeout(2000)
-    v.button("Run Simulation").click()
-    p.get_by_text("Period: 26 Weeks (ending 2024-09-05)").wait_for(timeout=120000)
+    v.button("Run simulation").click()
+    p.get_by_text(RESULTS_TITLE).wait_for(timeout=120000)
     p.wait_for_timeout(2000)
     assert p.locator(".js-plotly-plot").count() == 4
     assert p.locator('[data-testid="stException"]').count() == 0

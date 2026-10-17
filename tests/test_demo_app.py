@@ -57,86 +57,151 @@ def click(at, label):
     assert not at.exception, at.exception
 
 
+def run_simulation(at):
+    at.button(key="run_simulation").click().run()
+    assert not at.exception, at.exception
+
+
+def metrics(at):
+    return {m.label: m.value for m in at.metric}
+
+
 def test_app_starts_in_demo_mode():
     at = start_app()
-    assert any("Demo mode" in i.value for i in at.info)
-    assert [t.value for t in at.sidebar.text_input][0] == "AAPL, NVDA"
+    assert at.title[0].value == "StockAdvisor"
+    assert any("Demo data" in c.value for c in at.caption)
+    assert at.text_input(key="set_tickers").value == "AAPL, NVDA"
+    assert metrics(at) == {"Starting value": "$1,000", "Stocks": "AAPL, NVDA", "Strategies": "3 of 3"}
+    assert any("Test windows" in m.value and "Jul 10 – Jul 18, 2024" in m.value for m in at.markdown)
     assert not at.error
+    # one simulation action, in the main area
+    assert [b.label for b in at.button].count("Run simulation") == 1
+    assert not [b for b in at.sidebar.button if b.label.lower().startswith("run")]
+
+
+def test_demo_hides_controls_that_do_nothing():
+    at = start_app()
+    labels = [w.label for w in list(at.number_input) + list(at.checkbox)]
+    assert not [label for label in labels if "Commission" in label or "tax" in label.lower()]
+    assert "Update Email Parameters" not in labels
+
+
+def test_summary_follows_the_settings():
+    at = start_app()
+    at.number_input(key="set_value").set_value(2500).run()
+    at.checkbox(key="adv_dory").uncheck().run()
+    assert metrics(at)["Starting value"] == "$2,500"
+    assert metrics(at)["Strategies"] == "2 of 3"
+    assert any("(not selected)" in m.value and "Dory" in m.value for m in at.markdown)
+
+    # the allocations follow the stock symbols
+    at.text_input(key="set_tickers").set_value("AAPL").run()
+    assert metrics(at)["Stocks"] == "AAPL"
+    assert "alloc_NVDA" not in [n.key for n in at.number_input]
+    assert any("add up to 50%" in e.value for e in at.sidebar.error)
+    at.number_input(key="alloc_AAPL").set_value(70).run()
+    at.number_input(key="alloc_Cash").set_value(30).run()
+    assert not at.error
+    assert any("AAPL 70%" in m.value and "Cash 30%" in m.value for m in at.markdown)
+
+    at.text_input(key="set_periods").set_value("2").run()
+    assert any("the last 2 weeks of data" in m.value for m in at.markdown)
 
 
 def test_run_simulation_renders_all_strategies():
     at = start_app()
-    click(at, "Run Simulation")
+    run_simulation(at)
 
-    headers = [h.value for h in at.main.header]
-    assert headers == ["From 2024-07-10 to 2024-07-18",
-                       "Period: 1 Weeks (ending 2024-09-05)",
-                       "Period: 4 Weeks (ending 2024-09-05)",
-                       "Period: 26 Weeks (ending 2024-09-05)"]
+    assert [h.value for h in at.main.header] == ["Simulation results"]
+    assert [t.label for t in at.tabs] == ["Jul 10 – Jul 18, 2024", "Last 1 week", "Last 4 weeks", "Last 26 weeks"]
     assert len(at.get("plotly_chart")) == 4
     assert not at.error
 
     # the summary table compares the three strategies and matches the results committed in the repository
     summary = at.dataframe[0].value
-    assert {"always_cash", "always_hold", "dory"} <= set(summary["Advisor"])
+    assert {"Always Cash", "Always Hold", "Dory"} <= set(summary["Advisor"])
     reference = pd.read_csv(os.path.join(APP_DIR, "simulation_results_1.csv"))
     expected_dory = reference[reference["Advisor"] == "dory"].iloc[-1]["Portfolio Value USD"]
-    actual_dory = summary[summary["Advisor"] == "dory"].iloc[0]["Final Portfolio Value"]
+    actual_dory = summary[summary["Advisor"] == "Dory"].iloc[0]["Final Portfolio Value"]
     assert actual_dory == pytest.approx(expected_dory, abs=1e-3)
 
-    # results stay visible when other inputs change
-    at.sidebar.checkbox[0].check().run()
+    # results stay visible when other inputs change, with a note that they are out of date
+    at.number_input(key="set_value").set_value(2000).run()
     assert len(at.get("plotly_chart")) == 4
+    assert any("settings have changed" in c.value for c in at.caption)
+
+    # run again with the new settings
+    run_simulation(at)
+    assert not any("settings have changed" in c.value for c in at.caption)
+    assert at.dataframe[0].value.iloc[0]["Final Portfolio Value"] == 2000
 
 
 def test_invalid_inputs_show_errors_not_exceptions():
     at = start_app()
-    at.sidebar.text_input[0].set_value("AAPL, TSLA").run()
+    at.text_input(key="set_tickers").set_value("AAPL, TSLA").run()
     assert any("TSLA" in e.value for e in at.sidebar.error)
-    click(at, "Run Simulation")
+    run_simulation(at)
+    assert any("fix the ticker symbols" in e.value for e in at.main.error)
     assert not at.get("plotly_chart")
 
     at = start_app()
-    at.sidebar.text_input[1].set_value("1, abc").run()
-    click(at, "Run Simulation")
-    assert any("whole numbers" in e.value for e in at.sidebar.error)
+    at.text_input(key="set_periods").set_value("1, abc").run()
+    run_simulation(at)
+    assert any("whole numbers" in e.value for e in at.main.error)
 
     at = start_app()
-    at.sidebar.text_input[1].set_value("500").run()  # longer than the bundled data
-    click(at, "Run Simulation")
-    assert at.error and len(at.get("plotly_chart")) == 1
+    at.number_input(key="alloc_AAPL").set_value(40).run()
+    run_simulation(at)
+    assert any("must sum to 100%" in e.value for e in at.main.error)
+
+    at = start_app()
+    for advisor in ["always_cash", "always_hold", "dory"]:
+        at.checkbox(key=f"adv_{advisor}").uncheck().run()
+    run_simulation(at)
+    assert any("at least one advisor" in e.value for e in at.main.error)
+
+    at = start_app()
+    at.text_input(key="set_periods").set_value("500").run()  # longer than the bundled data
+    run_simulation(at)
+    assert at.main.error and len(at.get("plotly_chart")) == 1
 
 
 def test_email_settings_are_session_only():
     at = start_app()
-    at.sidebar.selectbox[0].select("Email Settings").run()
+    at.selectbox(key="page").select("Email Settings").run()
     assert not at.exception
     click(at, "Save")
     assert any("No emails will be sent" in s.value for s in at.sidebar.success)
 
 
-def test_email_parameters_are_session_only():
+def test_email_page_shows_last_run_and_settings_survive_page_switch():
     at = start_app()
-    [c for c in at.sidebar.checkbox if c.label == "Update Email Parameters"][0].check().run()
-    assert not at.exception
+    at.number_input(key="set_value").set_value(1500).run()
+    run_simulation(at)
     assert at.session_state["demo_email_parameters"]["tickers"] == ["AAPL", "NVDA"]
-    at.sidebar.selectbox[0].select("Email Settings").run()
+    at.selectbox(key="page").select("Email Settings").run()
     click(at, "Save")
-    assert any("AAPL, NVDA" in m.value for m in at.markdown)
+    assert any("AAPL, NVDA" in m.value and "$1500" in m.value for m in at.markdown)
+
+    at.selectbox(key="page").select("Simulator").run()
+    assert at.number_input(key="set_value").value == 1500
+    assert len(at.get("plotly_chart")) == 4
 
 
 def test_reset_demo_and_session_isolation():
     first, second = start_app(), start_app()
     assert first.session_state["work_dir"] != second.session_state["work_dir"]
 
-    click(first, "Run Simulation")
+    first.number_input(key="set_value").set_value(3000).run()
+    run_simulation(first)
     assert len(first.get("plotly_chart")) == 4
     assert not second.get("plotly_chart")
 
     old_dir = first.session_state["work_dir"]
-    click(first, "Reset Demo")
+    click(first, "Reset demo")
     assert not first.get("plotly_chart")
     assert not os.path.exists(old_dir)
+    assert metrics(first)["Starting value"] == "$1,000"  # defaults are restored
 
 
 def test_take_a_tour_never_runs_anything():
@@ -145,12 +210,13 @@ def test_take_a_tour_never_runs_anything():
     assert at.session_state["tour_seen"]
     assert not at.get("plotly_chart")
     assert "results" not in at.session_state
+    assert at.number_input(key="set_value").value == 1000
 
 
 def test_reset_demo_keeps_tour_choice():
     at = start_app()
     click(at, "Take a tour")
-    click(at, "Reset Demo")
+    click(at, "Reset demo")
     assert at.session_state["tour_seen"]
 
 
@@ -160,7 +226,7 @@ def test_app_works_without_tour_package(monkeypatch):
     monkeypatch.delitem(sys.modules, "demo_tour", raising=False)
     at = start_app()
     click(at, "Take a tour")
-    click(at, "Run Simulation")
+    run_simulation(at)
     assert len(at.get("plotly_chart")) == 4
 
 
@@ -175,5 +241,5 @@ def test_app_works_when_tour_component_fails(monkeypatch):
     at = start_app()
     assert at.session_state["tour_spotlight_failed"]
     click(at, "Take a tour")
-    click(at, "Run Simulation")
+    run_simulation(at)
     assert len(at.get("plotly_chart")) == 4

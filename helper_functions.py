@@ -46,7 +46,21 @@ def validate_tickers(tickers, data_path=HISTORICAL_DATA_PATH):
     return valid_tickers, invalid_tickers
 
 
-def plot_simulation_results(selected_advisors, csv_path, period_label=None):
+def plot_simulation_results(selected_advisors, csv_path, period_label=None, display_names=None, show_heading=True,
+                            colors=None):
+    """
+    Show the chart, summary table and daily data for one simulation result.
+
+    Parameters:
+        selected_advisors (list): advisors to include in the chart
+        csv_path (str): the simulation results csv
+        period_label (str, optional): heading shown above the chart
+        display_names (dict, optional): readable advisor names, e.g. {"always_cash": "Always Cash"} (display only)
+        show_heading (bool): show period_label as a heading (False when the label is already shown, e.g. as a tab)
+        colors (dict, optional): a fixed line color per displayed advisor name
+    """
+    display_names = display_names or {}
+
     # load the CSV file into a DataFrame
     df = pd.read_csv(csv_path)
 
@@ -54,19 +68,25 @@ def plot_simulation_results(selected_advisors, csv_path, period_label=None):
     df['Date'] = pd.to_datetime(df['Date']).dt.date  # Convert to date only
 
     # filter the DataFrame to include only the selected advisors
-    df_filtered = df[df['Advisor'].isin(selected_advisors)]
+    df_filtered = df[df['Advisor'].isin(selected_advisors)].copy()
+    df_filtered['Advisor'] = df_filtered['Advisor'].map(lambda a: display_names.get(a, a))
+
+    if show_heading:
+        st.header(f"{period_label if period_label else ''}")
 
     # create an interactive plot using Plotly
-    st.header(f"{period_label if period_label else ''}")
-
-    # create a figure with Plotly for each selected advisor
-    fig = px.line(df_filtered, x='Date', y='Portfolio Value USD', color='Advisor',
-                  labels={'Portfolio Value USD': 'Portfolio Value (USD)', 'Date': 'Date'})
+    fig = px.line(df_filtered, x='Date', y='Portfolio Value USD', color='Advisor', color_discrete_map=colors or {},
+                  labels={'Portfolio Value USD': 'Portfolio value (USD)', 'Date': 'Date', 'Advisor': 'Strategy'})
 
     # customize the layout
-    fig.update_layout(xaxis_title='Date',
-                      yaxis_title='Portfolio Value (USD)',
-                      xaxis=dict(tickformat='%Y-%m-%d'))
+    fig.update_traces(line_width=2, hovertemplate='%{y:$,.2f}')
+    fig.update_layout(xaxis_title=None,
+                      yaxis_title='Portfolio value (USD)',
+                      xaxis=dict(tickformat='%b %d, %Y'),
+                      yaxis=dict(tickprefix='$'),
+                      hovermode='x unified',
+                      legend_title_text='Strategy',
+                      margin=dict(t=30, b=10))
 
     # show the interactive plot in Streamlit
     st.plotly_chart(fig)
@@ -74,17 +94,23 @@ def plot_simulation_results(selected_advisors, csv_path, period_label=None):
     # generate and display the summary table
     summary_df = summarize_portfolio(csv_path)
     summary_df_formatted = summary_df.round(3)
-    st.markdown("<h3 style='font-size: 18px;'>Summary of Portfolio Performance</h3>", unsafe_allow_html=True)
-    st.write(summary_df_formatted)
+    summary_df_formatted['Advisor'] = summary_df_formatted['Advisor'].map(lambda a: display_names.get(a, a))
+    money = st.column_config.NumberColumn(format="$%.2f")
+    st.markdown("##### Summary of portfolio performance")
+    st.dataframe(summary_df_formatted, hide_index=True,
+                 column_config={"Advisor": "Strategy", "Final Portfolio Value": money,
+                                "% Return": st.column_config.NumberColumn(format="%.2f%%"),
+                                **{col: money for col in summary_df_formatted.columns if col.endswith(' total')}})
 
     # format the DataFrame for display with up to 3 decimal places
     df_formatted = df.round(3)
 
     # display the original dataframe as a table inside an expander
-    with st.expander("View original data"):
-        st.write(df_formatted)
+    with st.expander("View daily data"):
+        st.dataframe(df_formatted, hide_index=True)
 
-    st.markdown("---")
+    if show_heading:
+        st.markdown("---")
 
 
 def plot_graphs(selected_advisors, csv_path, save_path=None, period_label=None):

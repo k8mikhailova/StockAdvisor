@@ -26,13 +26,12 @@ INPUTS_KEY = "tour_inputs"
 SIMULATION_KEY = "tour_simulation"
 PORTFOLIO_KEY = "tour_portfolio"
 ADVISORS_KEY = "tour_advisors"
-RUN_KEY = "tour_run"
-RESULTS_KEY = "tour_results"  # wraps the first result section
+RUN_KEY = "tour_run"  # the "Your simulation" summary and Run simulation button
+RESULTS_KEY = "tour_results"  # wraps the result tabs
 
 SPOTLIGHT_MIN_WIDTH = 768  # below this, Streamlit shows the sidebar as an overlay
 
-WELCOME_TEXT = ("StockAdvisor lets you compare simple investment strategies using historical stock data. "
-                "Want a quick walkthrough?")
+WELCOME_TEXT = "Want a quick walkthrough of the settings and strategies?"
 
 # step text uses **bold** and line breaks, shown as markdown in the walkthrough and as HTML in the spotlight tour
 # (title, text, container key or None, control lives in the sidebar)
@@ -41,23 +40,22 @@ PAGES_STEP = (
     "**Simulator**, where you are now, compares the strategies. **Email Settings** is where you'd schedule a "
     "daily email report. In this demo it only keeps your settings for this visit and never sends email.",
     PAGES_KEY, True)
+PORTFOLIO_STEP = (
+    "Set up the portfolio",
+    "**Initial portfolio value** is the total you start with, and the **allocations** split it between the stocks "
+    "and cash. The example puts $1,000 50/50 into AAPL and NVDA, so each gets $500. They need to add up to 100%.",
+    PORTFOLIO_KEY, True)
 INPUTS_STEP = (
     "Choose stocks and data",
-    "Pick the stocks and the range of price data to work with. The demo has daily AAPL and NVDA prices from "
-    "January 2023 to September 2024, and I've already filled in an example.",
+    "Pick the stocks and the range of price data to use. The demo has daily AAPL and NVDA prices from January 2023 "
+    "to September 2024, and I've already filled in an example. The allocations above follow the stocks you enter.",
     INPUTS_KEY, True)
 SIMULATION_STEP = (
     "Pick what to test",
-    "The simulation dates choose which stretch of that data the strategies are tested on, so they need to fall "
-    "inside the range above. **Periods** add extra tests over the last 1, 4 and 26 weeks of the data, "
-    "each with its own results.",
+    "The test dates choose which stretch of that data the strategies are tested on, so they need to fall inside "
+    "the data range. **Extra test periods** add tests over the last 1, 4 and 26 weeks of the data, each with its "
+    "own results.",
     SIMULATION_KEY, True)
-PORTFOLIO_STEP = (
-    "Set up the portfolio",
-    "**Initial Portfolio Value** is the total you start with. **Portfolio Allocations** (the expander below) "
-    "splits it between the stocks and cash. The example puts $1,000 50/50 into AAPL and NVDA, so each gets $500. "
-    "Commission and tax are recorded but not applied yet.",
-    PORTFOLIO_KEY, True)
 ADVISORS_STEP = (
     "Compare strategies",
     "**Always Cash** sells everything on the first day and stays in cash, a no-risk baseline.\n"
@@ -67,26 +65,27 @@ ADVISORS_STEP = (
     "It's a simple rule, not a prediction.",
     ADVISORS_KEY, True)
 RUN_STEP = (
-    "Run a simulation",
-    "Click **Run Simulation** to test the selected strategies with the same starting portfolio. For your dates and "
-    "for each period, you'll get a chart of portfolio value over time and a table with each strategy's final value "
-    "and % return.",
-    RUN_KEY, True)
+    "Check and run",
+    "This summary updates as you change the settings. Click **Run simulation** to test the selected strategies. "
+    "For each test window you'll get a chart of portfolio value over time and a table with each strategy's final "
+    "value and % return.",
+    RUN_KEY, False)
 RESULTS_STEP = (
     "Read the results",
-    "Each line shows how one strategy's portfolio value changed day by day. The summary table compares final value "
-    "and % return (\"Initial\" is the starting point), and \"View original data\" shows the daily holdings.",
+    "Each tab is one test window. The chart shows how each strategy's portfolio value changed day by day, and the "
+    "table compares final value and % return (\"Initial\" is the starting point). "
+    "\"View daily data\" shows the daily holdings.",
     RESULTS_KEY, False)
 FINISH_STEP = (
     "You're all set!",
-    "Try different dates, allocations or strategies to see how the results change. "
-    "You can replay this tour anytime with \"Take a tour\".",
+    "Try different stocks, allocations, dates or strategies and run it again to see how the results change. "
+    "You can replay this tour anytime with \"Take a tour\" at the bottom of the sidebar.",
     None, False)
 
 
 def steps_for(has_results):
-    """The tour steps in sidebar order. The results step is only included when there are results to highlight."""
-    steps = [PAGES_STEP, INPUTS_STEP, SIMULATION_STEP, PORTFOLIO_STEP, ADVISORS_STEP, RUN_STEP]
+    """The tour steps in page order. The results step is only included when there are results to highlight."""
+    steps = [PAGES_STEP, PORTFOLIO_STEP, INPUTS_STEP, SIMULATION_STEP, ADVISORS_STEP, RUN_STEP]
     if has_results:
         steps.append(RESULTS_STEP)
     return steps + [FINISH_STEP]
@@ -114,9 +113,19 @@ export default function (component) {
   if (data && data.mark_seen && store) {
     try { store.setItem(STORAGE_KEY, "1"); } catch (e) {}
   }
+  // tour cards follow the app theme
+  document.body.classList.toggle("stockadvisor-dark", !!(data && data.dark));
+  // bring new simulation results into view once
+  if (data && data.scroll_to && parentElement.__stockadvisorScrolled !== data.scroll_to) {
+    parentElement.__stockadvisorScrolled = data.scroll_to;
+    setTimeout(() => {
+      const results = document.querySelector(".st-key-results_section");
+      if (results) results.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 300);
+  }
   const measure = () => {
     const width = window.innerWidth;
-    const target = document.querySelector(".st-key-%(inputs)s");
+    const target = document.querySelector(".st-key-%(pages)s");  // the first sidebar control
     let sidebarVisible = false;
     if (target) {
       const r = target.getBoundingClientRect();
@@ -140,7 +149,7 @@ export default function (component) {
   const timer = setInterval(report, 700);
   return () => clearInterval(timer);
 }
-""" % {"inputs": INPUTS_KEY, "min_width": SPOTLIGHT_MIN_WIDTH}
+""" % {"pages": PAGES_KEY, "min_width": SPOTLIGHT_MIN_WIDTH}
 
 # compact tour cards that match the Streamlit look (Driver.js class names)
 TOUR_CSS = """
@@ -163,6 +172,13 @@ body .driver-popover-footer button {
 }
 body .driver-popover-footer .driver-popover-next-btn { background: #ff4b4b; border-color: #ff4b4b; color: #fff; }
 body .driver-popover-close-btn { color: #6b6f7b; }
+/* keep the results heading clear of the app toolbar when scrolled into view */
+.st-key-results_section { scroll-margin-top: 4rem; }
+body.stockadvisor-dark .driver-popover { background: #262730; color: #fafafa; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }
+body.stockadvisor-dark .driver-popover-arrow { border-color: #262730; }
+body.stockadvisor-dark .driver-popover-progress-text,
+body.stockadvisor-dark .driver-popover-close-btn { color: #a3a8b8; }
+body.stockadvisor-dark .driver-popover-footer button { background: #0e1117; color: #fafafa; border-color: #4a4d57; }
 """
 
 try:
@@ -177,46 +193,49 @@ def _session_seen():
     return st.session_state.get("tour_seen", False)
 
 
-def mount_env():
-    """Mount the invisible helper and return the browser environment dict, or None if it is not known (yet)."""
+def mount_env(scroll_to=None):
+    """
+    Mount the invisible browser helper and return the environment dict, or None if it is not known (yet).
+    scroll_to: a new value scrolls the page to the simulation results once.
+    """
     if _env_component is None:
         return None
     try:
-        result = _env_component(key="tour_env", data={"mark_seen": _session_seen()}, default={"env": None},
-                                height=0, on_env_change=lambda: None)
+        dark = st.context.theme.type == "dark"
+    except Exception:
+        dark = False
+    try:
+        result = _env_component(key="tour_env", data={"mark_seen": _session_seen(), "dark": dark,
+                                                      "scroll_to": scroll_to},
+                                default={"env": None}, height=0, on_env_change=lambda: None)
         return result.env
     except Exception:
         logger.exception("Tour helper component failed")
         return None
 
 
-def _start(env):
+def _start():
+    # run() decides between the spotlight tour and the walkthrough, using the current viewport
     st.session_state.tour_seen = True
-    if Tour is not None and env and env.get("spotlight") and not st.session_state.get("tour_spotlight_failed"):
-        # a fresh component key for every run, so the previous run's "dismissed" state cannot end the new one
-        st.session_state.tour_run_count = st.session_state.get("tour_run_count", 0) + 1
-        st.session_state.tour_spotlight_pending = True
-    else:
-        st.session_state.tour_walk_step = 0
-        st.session_state.tour_walk_active = True
+    st.session_state.tour_requested = True
 
 
 def _skip():
     st.session_state.tour_seen = True
 
 
-def render_entry(env):
-    """The welcome card for first-time visitors, otherwise a small "Take a tour" button."""
-    show_welcome = env is not None and not env.get("seen") and not _session_seen()
-    if show_welcome:
+def render_welcome(env):
+    """The welcome card for first-time visitors."""
+    if env is not None and not env.get("seen") and not _session_seen():
         with st.container(border=True, key="tour_welcome"):
             st.markdown(WELCOME_TEXT)
             with st.container(horizontal=True):
-                st.button("Start tour", type="primary", on_click=_start, args=(env,), key="tour_start")
+                st.button("Start tour", type="primary", on_click=_start, key="tour_start")
                 st.button("No thanks", type="tertiary", on_click=_skip, key="tour_skip")
-    else:
-        st.button("Take a tour", type="tertiary", icon=":material/explore:", on_click=_start, args=(env,),
-                  key="tour_replay")
+
+
+def render_replay_button():
+    st.button("Take a tour", type="tertiary", icon=":material/explore:", on_click=_start, key="tour_replay")
 
 
 def _sidebar_hint(env):
@@ -262,7 +281,7 @@ def _spotlight_steps(has_results):
     tour_steps = steps_for(has_results)
     for i, (title, text, key, in_sidebar) in enumerate(tour_steps):
         if key:
-            step = Tour.bind(key, title=title, desc=_as_html(text), side="right" if in_sidebar else "left")
+            step = Tour.bind(key, title=title, desc=_as_html(text), side="right" if in_sidebar else None)
         else:
             step = Tour.info(title=title, desc=_as_html(text))  # centered card, nothing highlighted
         # Driver.js button labels, matching the walkthrough
@@ -274,6 +293,16 @@ def _spotlight_steps(has_results):
 def run(env, has_results):
     """Show the active tour, if any. Call this at the end of the page so every highlighted control exists."""
     spotlight_ok = bool(env and env.get("spotlight"))
+
+    requested = st.session_state.pop("tour_requested", False)
+    use_spotlight = Tour is not None and spotlight_ok and not st.session_state.get("tour_spotlight_failed")
+    if requested and use_spotlight:
+        # a fresh component key for every run, so the previous run's "dismissed" state cannot end the new one
+        st.session_state.tour_run_count = st.session_state.get("tour_run_count", 0) + 1
+        st.session_state.tour_spotlight_pending = True
+    elif requested:
+        st.session_state.tour_walk_step = 0
+        st.session_state.tour_walk_active = True
 
     if Tour is not None and not st.session_state.get("tour_spotlight_failed"):
         try:

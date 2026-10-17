@@ -12,8 +12,8 @@ A comprehensive stock portfolio simulation and advisory tool built with Streamli
 - **Portfolio Simulation**: Backtest strategies over custom time periods
 - **Interactive Dashboard**: Streamlit-based UI for easy parameter configuration
 - **Email Automation**: Automated daily reports with performance charts
-- **Tax and Commission Inputs**: Capital gains tax rates and commission per trade are collected with the simulation
-  parameters (the simulation engine does not apply them yet)
+- **Tax and Commission Inputs** (live mode only): collected with the simulation parameters, but the simulation engine
+  does not apply them yet, so the public demo doesn't show them
 - **Public Demo Mode**: Runs on bundled historical data with no API keys, no external requests and no emails
 - **Optional Guided Tour**: A spotlight tour on desktop and a simple step-by-step walkthrough on narrow screens
 
@@ -137,6 +137,7 @@ StockAdvisor/
 ├── config.py             # Configuration settings
 ├── to_email.py           # Email automation
 ├── demo_tour.py          # Optional guided tour for the public demo
+├── ui.py                 # Layout helpers for the Simulator page (summary, allocation bar, labels)
 ├── requirements.txt      # Python dependencies
 ├── email_settings.example.json  # Example email settings (email_settings.json is created in live mode, git-ignored)
 ├── tests/                # Streamlit AppTest checks for demo mode

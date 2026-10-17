@@ -2,13 +2,14 @@ import os
 import shutil
 import tempfile
 import streamlit as st
-from datetime import datetime, date, timedelta
-from config import DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, SETTINGS_FILE_PATH, DEMO_MODE, HISTORICAL_DATA_PATH
+from datetime import date, timedelta
+from config import DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, DEMO_MODE, HISTORICAL_DATA_PATH
 from helper_functions import (validate_tickers, plot_simulation_results, read_and_display, save_email_settings,
                               save_email_parameters)
 from simulator import get_csv
 from data_fetcher import load_historical_data
 import demo_tour
+import ui
 
 # set page configuration
 st.set_page_config(
@@ -22,6 +23,9 @@ DEMO_ALLOCATIONS = {"AAPL": 50, "NVDA": 50, "Cash": 0}
 DEMO_SIMULATION_START = date(2024, 7, 10)
 DEMO_SIMULATION_END = date(2024, 7, 18)
 
+# session keys of the settings widgets (kept when switching pages, cleared by Reset demo)
+SETTING_PREFIXES = ("set_", "alloc_", "adv_")
+
 
 def get_work_dir():
     """Each visitor gets a private temporary folder for simulation results, so sessions never share files."""
@@ -31,7 +35,7 @@ def get_work_dir():
 
 
 def reset_demo():
-    """Clear this visitor's inputs and results (the tour's "seen" state is kept)."""
+    """Clear this visitor's results and restore the default settings (the tour's "seen" state is kept)."""
     work_dir = st.session_state.get('work_dir')
     if work_dir:
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -47,20 +51,32 @@ if DEMO_MODE:
     data_first_date = historical_data['date'].min().date()
     data_last_date = historical_data['date'].max().date()
     data_tickers = sorted(historical_data['ticker'].unique())
+    DATA_NOTE = (f":material/history: Demo data: daily {' and '.join(data_tickers)} prices, "
+                 f"{ui.format_range(data_first_date, data_last_date)}. Results are simulations on past prices, "
+                 f"not live market data or investment advice. No emails are sent.")
 
-    st.info(
-        f"**Demo mode.** StockAdvisor is running on bundled historical daily prices for "
-        f"{', '.join(data_tickers)} from {data_first_date} to {data_last_date}. All results are simulations on past "
-        f"data, not live market information or investment advice. No API requests are made and no emails are sent.",
-        icon="ℹ️"
-    )
+# keep the settings when the visitor switches to the Email Settings page and back
+for key in list(st.session_state.keys()):
+    if key.startswith(SETTING_PREFIXES):
+        st.session_state[key] = st.session_state[key]
 
-    # pre-fill inputs so visitors can run a simulation immediately
-    if 'allocations' not in st.session_state:
-        st.session_state.allocations = dict(DEMO_ALLOCATIONS)
-        st.session_state.saved_allocations = dict(DEMO_ALLOCATIONS)
-
-st.sidebar.header("StockAdvisor Input")
+# default settings (set once per session, so the widgets below don't need a value argument)
+defaults = {
+    "set_value": 1000,
+    "set_tickers": DEMO_TICKERS if DEMO_MODE else "",
+    "set_start": data_first_date if DEMO_MODE else date(2023, 1, 1),
+    "set_end": data_last_date if DEMO_MODE else date.today(),
+    "set_sim_start": DEMO_SIMULATION_START if DEMO_MODE else None,
+    "set_sim_end": DEMO_SIMULATION_END if DEMO_MODE else None,
+    "set_periods": "1,4,26",
+    "set_commission": 0,
+    "set_tax": False,
+    "set_short_tax": 0,
+    "set_long_tax": 0,
+    **{f"adv_{advisor}": DEMO_MODE for advisor in ui.ADVISORS},
+}
+for key, value in defaults.items():
+    st.session_state.setdefault(key, value)
 
 # creating a dictionary for sidebar navigation
 pages = {
@@ -69,17 +85,18 @@ pages = {
 }
 
 # sidebar navigation
-page = st.sidebar.container(key=demo_tour.PAGES_KEY).selectbox("Select Page", options=list(pages.keys()))
+page = st.sidebar.container(key=demo_tour.PAGES_KEY).selectbox("Page", options=list(pages.keys()), key="page")
 
 
 if page == "Email Settings":
     st.sidebar.header("Settings")
-    st.header("Email Settings")
+    st.title("Email Settings")
 
     if DEMO_MODE:
-        st.caption("In the full version, a background script (to_email.py) runs the saved simulation every day and "
-                   "emails the charts and summary tables. In this demo, settings are kept only for your session and "
-                   "no emails are sent.")
+        st.caption(DATA_NOTE)
+        st.write("In the full version, a background script (to_email.py) runs the saved simulation every day and "
+                 "emails the charts and summary tables. In this demo, settings are kept only for your visit, the "
+                 "report uses your last simulation, and no emails are sent.")
 
     # create an empty placeholder to display settings
     settings_display_area = st.empty()
@@ -131,18 +148,19 @@ if page == "Email Settings":
             read_and_display(settings_display_area)
 
 else:
-    # main tab
-    if DEMO_MODE:
-        tour_slot = st.container()  # welcome card or "Take a tour" button
+    # ---------------- sidebar: settings, in the order a visitor fills them in ----------------
+    # sections are created first, so the portfolio (which depends on the stock symbols) can sit above them
+    portfolio_box = st.sidebar.container(key=demo_tour.PORTFOLIO_KEY)
+    data_box = st.sidebar.container(key=demo_tour.INPUTS_KEY)
+    simulation_box = st.sidebar.container(key=demo_tour.SIMULATION_KEY)
+    advisors_box = st.sidebar.container(key=demo_tour.ADVISORS_KEY)
 
-    st.sidebar.text("")
-    inputs_box = st.sidebar.container(key=demo_tour.INPUTS_KEY)
-    inputs_box.subheader("Historical Data Input")
-    tickers = inputs_box.text_input("Enter Stock Ticker Symbols (comma-separated)",
-                                    DEMO_TICKERS if DEMO_MODE else "",
-                                    help=f"Demo data includes: {', '.join(data_tickers)}" if DEMO_MODE else None)
+    # historical data
+    data_box.subheader("Historical data")
+    tickers = data_box.text_input("Stock symbols (comma-separated)", key="set_tickers",
+                                  help=f"Demo data includes: {', '.join(data_tickers)}" if DEMO_MODE else None)
 
-    tickers_list = [ticker.strip().upper() for ticker in tickers.split(',') if ticker.strip()]
+    tickers_list = list(dict.fromkeys(ticker.strip().upper() for ticker in tickers.split(',') if ticker.strip()))
     invalid_tickers = []
 
     # error handling
@@ -151,115 +169,144 @@ else:
 
         if invalid_tickers:
             if DEMO_MODE:
-                inputs_box.error(f"Not available in the demo data: {', '.join(invalid_tickers)}. "
-                                 f"Available tickers: {', '.join(data_tickers)}")
+                data_box.error(f"Not available in the demo data: {', '.join(invalid_tickers)}. "
+                               f"Available tickers: {', '.join(data_tickers)}")
             else:
-                inputs_box.error(f"Invalid tickers: {', '.join(invalid_tickers)}")
+                data_box.error(f"Invalid tickers: {', '.join(invalid_tickers)}")
 
+    # the bundled data covers a fixed date range, so the date pickers are limited to it
+    date_limits = dict(min_value=data_first_date, max_value=data_last_date) if DEMO_MODE else {}
+    start_col, end_col = data_box.columns(2)
+    start_date = start_col.date_input("Data from", key="set_start", **date_limits)
+    end_date = end_col.date_input("Data to", key="set_end", **date_limits)
     if DEMO_MODE:
-        # the bundled data covers a fixed date range, so the date pickers are limited to it
-        date_limits = dict(min_value=data_first_date, max_value=data_last_date)
-        start_date = inputs_box.date_input("Start Date", data_first_date, **date_limits)
-        end_date = inputs_box.date_input("End Date", data_last_date, **date_limits)
-    else:
-        start_date = inputs_box.date_input("Start Date", date(2023, 1, 1))
-        end_date = inputs_box.date_input("End Date", date.today())
+        data_box.caption(f"Available: {ui.format_range(data_first_date, data_last_date)}")
 
-    st.sidebar.text("")
-    simulation_box = st.sidebar.container(key=demo_tour.SIMULATION_KEY)
-    simulation_box.subheader("Simulation Parameters")
-    if DEMO_MODE:
-        simulation_start_date = simulation_box.date_input("Simulation Start Date", DEMO_SIMULATION_START, **date_limits)
-        simulation_end_date = simulation_box.date_input("Simulation End Date", DEMO_SIMULATION_END, **date_limits)
-    else:
-        simulation_start_date = simulation_box.date_input("Simulation Start Date", value=None)
-        simulation_end_date = simulation_box.date_input("Simulation End Date", value=None, max_value=date.today())
+    # simulation settings
+    simulation_box.subheader("Simulation settings")
+    sim_start_col, sim_end_col = simulation_box.columns(2)
+    simulation_start_date = sim_start_col.date_input("Test from", key="set_sim_start", **date_limits)
+    simulation_end_date = sim_end_col.date_input("Test to", key="set_sim_end",
+                                                 **(date_limits or dict(max_value=date.today())))
     simulation_periods = simulation_box.text_input(
-        "Periods for Simulation (in weeks, comma-separated)", "1,4,26",
-        help=f"In demo mode, periods are counted back from {data_last_date}, the last date in the sample data."
-        if DEMO_MODE else None)
+        "Extra test periods (weeks, comma-separated)", key="set_periods",
+        help=f"Each number adds a test over the last N weeks of data (ending {ui.format_date(data_last_date)})."
+        if DEMO_MODE else "Each number adds a test over the last N weeks, ending today.")
 
-    portfolio_box = st.sidebar.container(key=demo_tour.PORTFOLIO_KEY)
-    initial_value = portfolio_box.number_input("Initial Portfolio Value (USD)", 1000)
-    commission_per_trade = portfolio_box.number_input("Commission per Trade", 0,
-                                                   help="Recorded with the simulation parameters. The simulation "
-                                                        "engine does not deduct commissions yet.")
-    # initialize the tax variables with default values
-    short_term_capital_gains = 0
-    long_term_capital_gains = 0
-    include_tax = portfolio_box.checkbox("Include Tax", help="Recorded with the simulation parameters. The simulation "
-                                                          "engine does not apply taxes yet.")
+    # portfolio: starting value and allocations, which follow the stock symbols above
+    portfolio_box.subheader("Portfolio")
+    initial_value = portfolio_box.number_input("Initial portfolio value (USD)", min_value=1, step=100,
+                                               key="set_value")
+    portfolio_box.caption("Allocations (%)")
+    alloc_names = tickers_list + ['Cash']
+    alloc_cols = portfolio_box.columns(2)
+    for i, name in enumerate(alloc_names):
+        st.session_state.setdefault(f"alloc_{name}", DEMO_ALLOCATIONS.get(name, 0) if DEMO_MODE
+                                    else (100 if name == 'Cash' else 0))
+        alloc_cols[i % 2].number_input(name, min_value=0, max_value=100, step=10, key=f"alloc_{name}")
+    allocations = {name: st.session_state[f"alloc_{name}"] for name in alloc_names}
+    total_allocation = sum(allocations.values())
+    if total_allocation == 100:
+        portfolio_box.caption("Total: 100%")
+    else:
+        portfolio_box.error(f"Allocations add up to {total_allocation}%. They need to total 100%.")
 
-    if include_tax:
-        short_term_capital_gains = portfolio_box.number_input("Short-term Capital Gains Tax Rate (%)", 0)
-        long_term_capital_gains = portfolio_box.number_input("Long-term Capital Gains Tax Rate (%)", 0)
+    if DEMO_MODE:
+        # commission and tax are not applied by the simulation engine, so the public demo doesn't offer them
+        commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains = 0, False, 0, 0
+    else:
+        commission_per_trade = portfolio_box.number_input("Commission per trade", min_value=0, key="set_commission",
+                                                          help="Recorded with the simulation parameters. The "
+                                                               "simulation engine does not deduct commissions yet.")
+        include_tax = portfolio_box.checkbox("Include tax", key="set_tax",
+                                             help="Recorded with the simulation parameters. The simulation engine "
+                                                  "does not apply taxes yet.")
+        short_term_capital_gains = long_term_capital_gains = 0
+        if include_tax:
+            short_term_capital_gains = portfolio_box.number_input("Short-term capital gains tax rate (%)",
+                                                                  min_value=0, key="set_short_tax")
+            long_term_capital_gains = portfolio_box.number_input("Long-term capital gains tax rate (%)",
+                                                                 min_value=0, key="set_long_tax")
 
-    # collapsible section for portfolio allocations
-    with portfolio_box.expander("Portfolio Allocations"):
-        if st.button("Update Stocks"):
-            st.session_state.allocations = {ticker: 0 for ticker in tickers_list}
-            st.session_state.allocations['Cash'] = 100
-            st.write("Allocations updated based on input tickers.")
-
-        if 'allocations' in st.session_state:
-            st.subheader("Portfolio Allocations")
-            st.session_state.allocations['Cash'] = st.number_input("% in Cash", 0, 100, st.session_state.allocations['Cash'], step=10)
-            for ticker in st.session_state.allocations:
-                if ticker != 'Cash':
-                    st.session_state.allocations[ticker] = st.number_input(f"% in {ticker}", 0, 100, st.session_state.allocations[ticker], step=10)
-
-            # ensure allocations sum to 100%
-            total_allocation = sum(st.session_state.allocations.values())
-
-            if st.button("Save Allocations"):
-                if total_allocation == 100:
-                    allocations = {ticker: st.session_state.allocations[ticker] for ticker in st.session_state.allocations}
-                    st.session_state.saved_allocations = allocations
-                    st.write("Allocations saved.")
-                else:
-                    st.error("Total allocations must sum to 100% before saving.")
-
-    # advisors selection
-    advisors_box = st.sidebar.container(key=demo_tour.ADVISORS_KEY)
+    # advisors
     advisors_box.subheader("Advisors")
-
-    advisor_options = {
-        "Always Cash": 'always_cash',
-        "Always Hold": 'always_hold',
-        "Dory": 'dory'
-    }
-
     selected_advisors = []
-
-    for selection, func_name in advisor_options.items():
-        if advisors_box.checkbox(selection, DEMO_MODE):
-            selected_advisors.append(func_name)
+    for advisor, (name, description) in ui.ADVISORS.items():
+        if advisors_box.checkbox(name, key=f"adv_{advisor}", help=description):
+            selected_advisors.append(advisor)
 
     def parse_periods():
         try:
             return [int(period.strip()) for period in simulation_periods.split(',') if period.strip()]
         except ValueError:
-            st.sidebar.error("Periods must be whole numbers of weeks, separated by commas.")
             return None
 
-    st.sidebar.write("")
-    if st.sidebar.checkbox("Update Email Parameters"):
-        allocations = st.session_state.get('saved_allocations')
-        periods = parse_periods()
+    periods = parse_periods()
+    if periods is None:
+        simulation_box.error("Periods must be whole numbers of weeks, separated by commas.")
 
-        if allocations is None:
-            st.sidebar.error("Please save allocations first.")
-        elif periods is not None:
-            # save parameters for emailing (demo mode keeps them in this session only)
-            parameters = save_email_parameters(tickers_list, start_date, end_date, simulation_start_date,
-                                               simulation_end_date, periods, initial_value, commission_per_trade,
-                                               include_tax, short_term_capital_gains, long_term_capital_gains,
-                                               allocations, selected_advisors, write_file=not DEMO_MODE)
-            if DEMO_MODE:
-                st.session_state.demo_email_parameters = parameters
+    if not DEMO_MODE and st.sidebar.checkbox("Update Email Parameters", key="set_email_parameters"):
+        # save parameters for emailing (live mode only; in demo mode the last run is used)
+        if periods is not None:
+            save_email_parameters(tickers_list, start_date, end_date, simulation_start_date, simulation_end_date,
+                                  periods, initial_value, commission_per_trade, include_tax,
+                                  short_term_capital_gains, long_term_capital_gains, allocations, selected_advisors)
 
-    def run_and_store(sim_start, sim_end, csv_path, period_label):
+    # the test windows that one run produces: (tab label, start, end)
+    windows = []
+    if simulation_start_date and simulation_end_date:
+        windows.append((ui.format_range(simulation_start_date, simulation_end_date), simulation_start_date,
+                        simulation_end_date))
+    # in demo mode the periods end on the last date of the bundled data instead of today
+    today = data_last_date if DEMO_MODE else date.today()
+    for period in periods or []:
+        windows.append((ui.period_label(period), today - timedelta(weeks=period), today))
+
+    current_settings = {"tickers": tuple(tickers_list), "allocations": tuple(allocations.items()),
+                        "value": initial_value, "data": (start_date, end_date),
+                        "test": (simulation_start_date, simulation_end_date), "periods": simulation_periods,
+                        "advisors": tuple(selected_advisors)}
+
+    # ---------------- main area ----------------
+    st.title("StockAdvisor")
+    st.write("Compare simple investment strategies on historical stock prices. Choose a portfolio and test dates "
+             "in the sidebar, then run a simulation to see how each strategy would have managed the same "
+             "starting money.")
+    if DEMO_MODE:
+        st.caption(DATA_NOTE)
+        tour_slot = st.container()  # welcome card for first-time visitors
+
+    with st.container(key=demo_tour.RUN_KEY):
+        st.subheader("Your simulation")
+        stats = st.columns(3)
+        stats[0].metric("Starting value", f"${initial_value:,.0f}")
+        stats[1].metric("Stocks", ", ".join(tickers_list) or "None")
+        stats[2].metric("Strategies", f"{len(selected_advisors)} of {len(ui.ADVISORS)}")
+        ui.allocation_bar(allocations)
+
+        if windows:
+            parts = [windows[0][0]] if simulation_start_date and simulation_end_date else []
+            if periods:
+                weeks = "week" if periods == [1] else "weeks"
+                parts.append(f"the last {ui.join_words([str(p) for p in periods])} {weeks} of data "
+                             f"(to {ui.format_date(today)})")
+            st.markdown(f"**Test windows:** {', plus '.join(parts)}")
+        else:
+            st.markdown("**Test windows:** none yet. Set test dates or periods in the sidebar.")
+
+        ui.strategy_list(selected_advisors)
+
+        with st.container(horizontal=True, vertical_alignment="center"):
+            run_clicked = st.button("Run simulation", type="primary", icon=":material/play_arrow:",
+                                    key="run_simulation")
+            st.caption(f"Runs {len(windows)} test{'' if len(windows) == 1 else 's'} on saved historical prices. "
+                       f"It takes a few seconds." if DEMO_MODE else
+                       f"Runs {len(windows)} test{'' if len(windows) == 1 else 's'} with fresh market data.")
+
+    def run_and_store(window_start, window_end, csv_path, tab_label):
         """Run the simulation for one period and remember the result for this session."""
+        # the simulation engine receives the dates as "YYYY-MM-DD" strings, as before
+        sim_start, sim_end = window_start.strftime("%Y-%m-%d"), window_end.strftime("%Y-%m-%d")
         try:
             if DEMO_MODE:
                 # use the bundled historical data without fetching or modifying it
@@ -272,91 +319,84 @@ else:
                         commission_per_trade, include_tax, short_term_capital_gains, long_term_capital_gains,
                         selected_advisors, csv_path, data_path=os.path.join(work_dir, "data.csv"), fetch_data=True)
         except (ValueError, RuntimeError, FileNotFoundError) as e:
-            st.error(f"{period_label}: {e}")
+            st.error(f"{tab_label}: {e}")
             return
         st.session_state.results.append({'advisors': list(selected_advisors), 'csv_path': csv_path,
-                                         'period_label': period_label})
+                                         'tab_label': tab_label, 'date_range': ui.format_range(window_start, window_end)})
 
-    # main section - if run simulation button is clicked...
-    if st.sidebar.container(key=demo_tour.RUN_KEY).button("Run Simulation"):
-
-        allocations = st.session_state.get('saved_allocations')
-
-        if allocations is None:
-            st.sidebar.error("Please update stocks and save new allocations.")
-            st.stop()
-
-        # check if allocations match the tickers (this is for error handling)
-        allocation_tickers = set(allocations.keys()) - {'Cash'}
-        input_tickers = set(tickers_list)
-        periods = parse_periods()
-
+    # the simulation action - the existing validation, now shown next to the button
+    if run_clicked:
         if invalid_tickers:
-            st.sidebar.error("Please fix the ticker symbols before running the simulation.")
-        elif allocation_tickers != input_tickers:
-            st.sidebar.error("Please update stocks and save new allocations.")
+            st.error("Please fix the ticker symbols before running the simulation.")
+        elif not tickers_list:
+            st.error("Please enter at least one stock symbol.")
         elif not selected_advisors:
-            st.sidebar.error("Please select at least one advisor before running the simulation.")
-        elif periods is not None and sum(allocations.values()) == 100:
+            st.error("Please select at least one advisor before running the simulation.")
+        elif periods is None:
+            st.error("Periods must be whole numbers of weeks, separated by commas.")
+        elif total_allocation != 100:
+            st.error("Total allocations must sum to 100% before running the simulation.")
+        elif simulation_start_date and simulation_end_date and not (start_date <= simulation_start_date <= end_date):
+            st.error("Simulation start date is out of the historical data range.")
+        elif simulation_start_date and simulation_end_date and not (start_date <= simulation_end_date <= end_date):
+            st.error("Simulation end date is out of the historical data range.")
+        elif simulation_start_date and simulation_end_date and simulation_start_date > simulation_end_date:
+            st.error("Simulation start date cannot be after the simulation end date.")
+        elif not windows:
+            st.error("Please set simulation dates or periods before running the simulation.")
+        else:
             st.session_state.results = []
-
-            # generate the next csv file name based on the file index
-            file_index = 0
-
-            # check if simulation start and end dates are provided
-            if simulation_start_date and simulation_end_date:
-                # Error handling for simulation start and end dates being out of range
-                if not (start_date <= simulation_start_date <= end_date):
-                    st.sidebar.error("Simulation start date is out of the historical data range.")
-                elif not (start_date <= simulation_end_date <= end_date):
-                    st.sidebar.error("Simulation end date is out of the historical data range.")
-                elif simulation_start_date > simulation_end_date:
-                    st.sidebar.error("Simulation start date cannot be after the simulation end date.")
-                else:
-                    file_index += 1
-                    csv_path = os.path.join(work_dir, f"simulation_results_{file_index}.csv")
-                    run_and_store(simulation_start_date, simulation_end_date, csv_path,
-                                  f"From {simulation_start_date} to {simulation_end_date}")
-
-            # check if simulation periods are provided
-            if periods:
-                # in demo mode the periods end on the last date of the bundled data instead of today
-                today = data_last_date if DEMO_MODE else date.today()
-
-                for period in periods:
-                    file_index += 1
-                    period_start_date = today - timedelta(weeks=period)
-                    period_end_date = today
-
-                    # convert to strings (e.g., "YYYY-MM-DD")
-                    period_start_date_str = period_start_date.strftime("%Y-%m-%d")
-                    period_end_date_str = period_end_date.strftime("%Y-%m-%d")
-
+            with st.spinner("Running simulation..."):
+                for file_index, (tab_label, sim_start, sim_end) in enumerate(windows, start=1):
                     # overwrite csv file
                     csv_path = os.path.join(work_dir, f"simulation_results_{file_index}.csv")
-                    period_label = f"Period: {period} Weeks"
-                    if DEMO_MODE:
-                        period_label += f" (ending {period_end_date_str})"
-                    run_and_store(period_start_date_str, period_end_date_str, csv_path, period_label)
-        else:
-            st.sidebar.error("Total allocations must sum to 100% before running the simulation.")
+                    run_and_store(sim_start, sim_end, csv_path, tab_label)
+            st.session_state.results_settings = current_settings
+            st.session_state.results_summary = (
+                f"{', '.join(f'{name} {pct}%' for name, pct in allocations.items())} of "
+                f"${initial_value:,.0f}, tested with {', '.join(ui.advisor_name(a) for a in selected_advisors)}.")
+            # bring the new results into view (handled by the browser helper below)
+            st.session_state.scroll_to_results = st.session_state.get("scroll_to_results", 0) + 1
+            st.session_state.scroll_to_results_pending = st.session_state.scroll_to_results
+            if DEMO_MODE:
+                # the Email Settings page shows the report this run would produce (nothing is saved or sent)
+                st.session_state.demo_email_parameters = save_email_parameters(
+                    tickers_list, start_date, end_date, simulation_start_date, simulation_end_date, periods or [],
+                    initial_value, commission_per_trade, include_tax, short_term_capital_gains,
+                    long_term_capital_gains, allocations, selected_advisors, write_file=False)
 
     # show the latest results of this session (they stay visible while other inputs are changed)
-    for i, result in enumerate(st.session_state.get('results', [])):
-        if os.path.isfile(result['csv_path']):
-            with st.container(key=demo_tour.RESULTS_KEY if i == 0 else None):
-                plot_simulation_results(result['advisors'], result['csv_path'], period_label=result['period_label'])
+    results = [r for r in st.session_state.get('results', []) if os.path.isfile(r['csv_path'])]
+    if results:
+        with st.container(key="results_section"):
+            st.header("Simulation results")
+            st.caption(st.session_state.get("results_summary", ""))
+            if st.session_state.get("results_settings") != current_settings:
+                st.caption(":material/sync: Your settings have changed since this run. Run the simulation again "
+                           "to update these results.")
+            with st.container(key=demo_tour.RESULTS_KEY):
+                tabs = st.tabs([r['tab_label'] for r in results])
+                for tab, result in zip(tabs, results):
+                    with tab:
+                        st.caption(f"Simulated {result['date_range']}")
+                        plot_simulation_results(result['advisors'], result['csv_path'],
+                                                period_label=result['tab_label'],
+                                                display_names={a: ui.advisor_name(a) for a in ui.ADVISORS},
+                                                show_heading=False, colors=ui.strategy_colors())
+            st.caption("Change any setting in the sidebar and run the simulation again to compare.")
 
 if DEMO_MODE:
-    st.sidebar.write("")
-    st.sidebar.button("Reset Demo", on_click=reset_demo,
-                      help="Clear your simulation results, allocations and saved settings. "
-                           "Reload the page to also reset every input.")
+    st.sidebar.divider()
+    with st.sidebar.container(horizontal=True):
+        if page == "Simulator":
+            demo_tour.render_replay_button()
+        st.button("Reset demo", on_click=reset_demo, icon=":material/restart_alt:", type="tertiary",
+                  help="Clear your results and restore the default settings.")
 
-    # optional onboarding tour (it only explains the interface and never runs anything)
-    with st.sidebar:
-        tour_env = demo_tour.mount_env()
-    if page == "Simulator":
-        with tour_slot:
-            demo_tour.render_entry(tour_env)
-        demo_tour.run(tour_env, has_results=bool(st.session_state.get('results')))
+# small browser helper: tour viewport check, theme for the tour cards, scrolling to new results
+with st.sidebar:
+    tour_env = demo_tour.mount_env(scroll_to=st.session_state.pop("scroll_to_results_pending", None))
+if DEMO_MODE and page == "Simulator":
+    with tour_slot:
+        demo_tour.render_welcome(tour_env)
+    demo_tour.run(tour_env, has_results=bool(st.session_state.get('results')))

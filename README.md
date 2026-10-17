@@ -15,6 +15,7 @@ A comprehensive stock portfolio simulation and advisory tool built with Streamli
 - **Tax and Commission Inputs**: Capital gains tax rates and commission per trade are collected with the simulation
   parameters (the simulation engine does not apply them yet)
 - **Public Demo Mode**: Runs on bundled historical data with no API keys, no external requests and no emails
+- **Optional Guided Tour**: A spotlight tour on desktop and a simple step-by-step walkthrough on narrow screens
 
 ## Live Demo (demo mode)
 
@@ -117,7 +118,8 @@ See `requirements.txt` for the complete list (tested with Python 3.12).
 ## Tests
 
 ```bash
-pip install -r requirements.txt pytest
+pip install -r requirements.txt pytest playwright
+playwright install chromium   # browser tests for the guided tour; skipped if not installed
 python -m pytest tests
 ```
 
@@ -134,6 +136,7 @@ StockAdvisor/
 ├── helper_functions.py    # Utility functions
 ├── config.py             # Configuration settings
 ├── to_email.py           # Email automation
+├── demo_tour.py          # Optional guided tour for the public demo
 ├── requirements.txt      # Python dependencies
 ├── email_settings.example.json  # Example email settings (email_settings.json is created in live mode, git-ignored)
 ├── tests/                # Streamlit AppTest checks for demo mode

@@ -137,3 +137,43 @@ def test_reset_demo_and_session_isolation():
     click(first, "Reset Demo")
     assert not first.get("plotly_chart")
     assert not os.path.exists(old_dir)
+
+
+def test_take_a_tour_never_runs_anything():
+    at = start_app()
+    click(at, "Take a tour")
+    assert at.session_state["tour_seen"]
+    assert not at.get("plotly_chart")
+    assert "results" not in at.session_state
+
+
+def test_reset_demo_keeps_tour_choice():
+    at = start_app()
+    click(at, "Take a tour")
+    click(at, "Reset Demo")
+    assert at.session_state["tour_seen"]
+
+
+def test_app_works_without_tour_package(monkeypatch):
+    import sys
+    monkeypatch.setitem(sys.modules, "streamlit_tour", None)  # import fails
+    monkeypatch.delitem(sys.modules, "demo_tour", raising=False)
+    at = start_app()
+    click(at, "Take a tour")
+    click(at, "Run Simulation")
+    assert len(at.get("plotly_chart")) == 4
+
+
+def test_app_works_when_tour_component_fails(monkeypatch):
+    import demo_tour
+
+    class BrokenTour:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("tour component failed to initialize")
+
+    monkeypatch.setattr(demo_tour, "Tour", BrokenTour)
+    at = start_app()
+    assert at.session_state["tour_spotlight_failed"]
+    click(at, "Take a tour")
+    click(at, "Run Simulation")
+    assert len(at.get("plotly_chart")) == 4

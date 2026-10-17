@@ -8,6 +8,7 @@ from helper_functions import (validate_tickers, plot_simulation_results, read_an
                               save_email_parameters)
 from simulator import get_csv
 from data_fetcher import load_historical_data
+import demo_tour
 
 # set page configuration
 st.set_page_config(
@@ -30,11 +31,13 @@ def get_work_dir():
 
 
 def reset_demo():
-    """Clear this visitor's inputs and results."""
+    """Clear this visitor's inputs and results (the tour's "seen" state is kept)."""
     work_dir = st.session_state.get('work_dir')
     if work_dir:
         shutil.rmtree(work_dir, ignore_errors=True)
-    st.session_state.clear()
+    for key in list(st.session_state.keys()):
+        if not demo_tour.is_tour_key(key):
+            del st.session_state[key]
 
 
 work_dir = get_work_dir()
@@ -129,9 +132,13 @@ if page == "Email Settings":
 
 else:
     # main tab
+    if DEMO_MODE:
+        tour_slot = st.container()  # welcome card or "Take a tour" button
+
     st.sidebar.text("")
-    st.sidebar.subheader("Historical Data Input")
-    tickers = st.sidebar.text_input("Enter Stock Ticker Symbols (comma-separated)",
+    inputs_box = st.sidebar.container(key=demo_tour.INPUTS_KEY)
+    inputs_box.subheader("Historical Data Input")
+    tickers = inputs_box.text_input("Enter Stock Ticker Symbols (comma-separated)",
                                     DEMO_TICKERS if DEMO_MODE else "",
                                     help=f"Demo data includes: {', '.join(data_tickers)}" if DEMO_MODE else None)
 
@@ -144,29 +151,29 @@ else:
 
         if invalid_tickers:
             if DEMO_MODE:
-                st.sidebar.error(f"Not available in the demo data: {', '.join(invalid_tickers)}. "
+                inputs_box.error(f"Not available in the demo data: {', '.join(invalid_tickers)}. "
                                  f"Available tickers: {', '.join(data_tickers)}")
             else:
-                st.sidebar.error(f"Invalid tickers: {', '.join(invalid_tickers)}")
+                inputs_box.error(f"Invalid tickers: {', '.join(invalid_tickers)}")
 
     if DEMO_MODE:
         # the bundled data covers a fixed date range, so the date pickers are limited to it
         date_limits = dict(min_value=data_first_date, max_value=data_last_date)
-        start_date = st.sidebar.date_input("Start Date", data_first_date, **date_limits)
-        end_date = st.sidebar.date_input("End Date", data_last_date, **date_limits)
+        start_date = inputs_box.date_input("Start Date", data_first_date, **date_limits)
+        end_date = inputs_box.date_input("End Date", data_last_date, **date_limits)
     else:
-        start_date = st.sidebar.date_input("Start Date", date(2023, 1, 1))
-        end_date = st.sidebar.date_input("End Date", date.today())
+        start_date = inputs_box.date_input("Start Date", date(2023, 1, 1))
+        end_date = inputs_box.date_input("End Date", date.today())
 
-    st.sidebar.text("")
-    st.sidebar.subheader("Simulation Parameters")
+    inputs_box.text("")
+    inputs_box.subheader("Simulation Parameters")
     if DEMO_MODE:
-        simulation_start_date = st.sidebar.date_input("Simulation Start Date", DEMO_SIMULATION_START, **date_limits)
-        simulation_end_date = st.sidebar.date_input("Simulation End Date", DEMO_SIMULATION_END, **date_limits)
+        simulation_start_date = inputs_box.date_input("Simulation Start Date", DEMO_SIMULATION_START, **date_limits)
+        simulation_end_date = inputs_box.date_input("Simulation End Date", DEMO_SIMULATION_END, **date_limits)
     else:
-        simulation_start_date = st.sidebar.date_input("Simulation Start Date", value=None)
-        simulation_end_date = st.sidebar.date_input("Simulation End Date", value=None, max_value=date.today())
-    simulation_periods = st.sidebar.text_input(
+        simulation_start_date = inputs_box.date_input("Simulation Start Date", value=None)
+        simulation_end_date = inputs_box.date_input("Simulation End Date", value=None, max_value=date.today())
+    simulation_periods = inputs_box.text_input(
         "Periods for Simulation (in weeks, comma-separated)", "1,4,26",
         help=f"In demo mode, periods are counted back from {data_last_date}, the last date in the sample data."
         if DEMO_MODE else None)
@@ -211,7 +218,8 @@ else:
                     st.error("Total allocations must sum to 100% before saving.")
 
     # advisors selection
-    st.sidebar.subheader("Advisors")
+    advisors_box = st.sidebar.container(key=demo_tour.ADVISORS_KEY)
+    advisors_box.subheader("Advisors")
 
     advisor_options = {
         "Always Cash": 'always_cash',
@@ -222,7 +230,7 @@ else:
     selected_advisors = []
 
     for selection, func_name in advisor_options.items():
-        if st.sidebar.checkbox(selection, DEMO_MODE):
+        if advisors_box.checkbox(selection, DEMO_MODE):
             selected_advisors.append(func_name)
 
     def parse_periods():
@@ -268,7 +276,7 @@ else:
                                          'period_label': period_label})
 
     # main section - if run simulation button is clicked...
-    if st.sidebar.button("Run Simulation"):
+    if st.sidebar.container(key=demo_tour.RUN_KEY).button("Run Simulation"):
 
         allocations = st.session_state.get('saved_allocations')
 
@@ -332,12 +340,21 @@ else:
             st.sidebar.error("Total allocations must sum to 100% before running the simulation.")
 
     # show the latest results of this session (they stay visible while other inputs are changed)
-    for result in st.session_state.get('results', []):
+    for i, result in enumerate(st.session_state.get('results', [])):
         if os.path.isfile(result['csv_path']):
-            plot_simulation_results(result['advisors'], result['csv_path'], period_label=result['period_label'])
+            with st.container(key=demo_tour.RESULTS_KEY if i == 0 else None):
+                plot_simulation_results(result['advisors'], result['csv_path'], period_label=result['period_label'])
 
 if DEMO_MODE:
     st.sidebar.write("")
     st.sidebar.button("Reset Demo", on_click=reset_demo,
                       help="Clear your simulation results, allocations and saved settings. "
                            "Reload the page to also reset every input.")
+
+    # optional onboarding tour (it only explains the interface and never runs anything)
+    with st.sidebar:
+        tour_env = demo_tour.mount_env()
+    if page == "Simulator":
+        with tour_slot:
+            demo_tour.render_entry(tour_env)
+        demo_tour.run(tour_env, has_results=bool(st.session_state.get('results')))

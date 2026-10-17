@@ -69,7 +69,7 @@ pages = {
 }
 
 # sidebar navigation
-page = st.sidebar.selectbox("Select Page", options=list(pages.keys()))
+page = st.sidebar.container(key=demo_tour.PAGES_KEY).selectbox("Select Page", options=list(pages.keys()))
 
 
 if page == "Email Settings":
@@ -165,35 +165,37 @@ else:
         start_date = inputs_box.date_input("Start Date", date(2023, 1, 1))
         end_date = inputs_box.date_input("End Date", date.today())
 
-    inputs_box.text("")
-    inputs_box.subheader("Simulation Parameters")
+    st.sidebar.text("")
+    simulation_box = st.sidebar.container(key=demo_tour.SIMULATION_KEY)
+    simulation_box.subheader("Simulation Parameters")
     if DEMO_MODE:
-        simulation_start_date = inputs_box.date_input("Simulation Start Date", DEMO_SIMULATION_START, **date_limits)
-        simulation_end_date = inputs_box.date_input("Simulation End Date", DEMO_SIMULATION_END, **date_limits)
+        simulation_start_date = simulation_box.date_input("Simulation Start Date", DEMO_SIMULATION_START, **date_limits)
+        simulation_end_date = simulation_box.date_input("Simulation End Date", DEMO_SIMULATION_END, **date_limits)
     else:
-        simulation_start_date = inputs_box.date_input("Simulation Start Date", value=None)
-        simulation_end_date = inputs_box.date_input("Simulation End Date", value=None, max_value=date.today())
-    simulation_periods = inputs_box.text_input(
+        simulation_start_date = simulation_box.date_input("Simulation Start Date", value=None)
+        simulation_end_date = simulation_box.date_input("Simulation End Date", value=None, max_value=date.today())
+    simulation_periods = simulation_box.text_input(
         "Periods for Simulation (in weeks, comma-separated)", "1,4,26",
         help=f"In demo mode, periods are counted back from {data_last_date}, the last date in the sample data."
         if DEMO_MODE else None)
 
-    initial_value = st.sidebar.number_input("Initial Portfolio Value (USD)", 1000)
-    commission_per_trade = st.sidebar.number_input("Commission per Trade", 0,
+    portfolio_box = st.sidebar.container(key=demo_tour.PORTFOLIO_KEY)
+    initial_value = portfolio_box.number_input("Initial Portfolio Value (USD)", 1000)
+    commission_per_trade = portfolio_box.number_input("Commission per Trade", 0,
                                                    help="Recorded with the simulation parameters. The simulation "
                                                         "engine does not deduct commissions yet.")
     # initialize the tax variables with default values
     short_term_capital_gains = 0
     long_term_capital_gains = 0
-    include_tax = st.sidebar.checkbox("Include Tax", help="Recorded with the simulation parameters. The simulation "
+    include_tax = portfolio_box.checkbox("Include Tax", help="Recorded with the simulation parameters. The simulation "
                                                           "engine does not apply taxes yet.")
 
     if include_tax:
-        short_term_capital_gains = st.sidebar.number_input("Short-term Capital Gains Tax Rate (%)", 0)
-        long_term_capital_gains = st.sidebar.number_input("Long-term Capital Gains Tax Rate (%)", 0)
+        short_term_capital_gains = portfolio_box.number_input("Short-term Capital Gains Tax Rate (%)", 0)
+        long_term_capital_gains = portfolio_box.number_input("Long-term Capital Gains Tax Rate (%)", 0)
 
     # collapsible section for portfolio allocations
-    with st.sidebar.expander("Portfolio Allocations"):
+    with portfolio_box.expander("Portfolio Allocations"):
         if st.button("Update Stocks"):
             st.session_state.allocations = {ticker: 0 for ticker in tickers_list}
             st.session_state.allocations['Cash'] = 100

@@ -119,6 +119,16 @@ def visitor(browser, app_url):
         v.close()
 
 
+TITLES = ["Two pages", "Choose stocks and data", "Pick what to test", "Set up the portfolio", "Compare strategies",
+          "Run a simulation", "You're all set!"]
+TITLES_WITH_RESULTS = TITLES[:-1] + ["Read the results"] + TITLES[-1:]
+TARGETS = ["st-key-tour_pages", "st-key-tour_inputs", "st-key-tour_simulation", "st-key-tour_portfolio",
+           "st-key-tour_advisors", "st-key-tour_run"]  # the sidebar steps, in order
+
+SIDEBAR_INPUTS = """() => [...document.querySelectorAll('[data-testid="stSidebar"] input')]
+  .map(e => e.type === 'checkbox' ? e.checked : e.value)"""
+
+
 def assert_highlight_on_screen(page, in_sidebar=True):
     box = page.evaluate(HIGHLIGHT_BOX)
     assert box and box["width"] > 0 and box["height"] > 0
@@ -128,34 +138,55 @@ def assert_highlight_on_screen(page, in_sidebar=True):
         assert box["right"] <= sidebar_right["x"] + sidebar_right["width"] + 1
 
 
+def highlighted_key(page):
+    return page.evaluate("""() => { const a = document.querySelector('.driver-active-element');
+      return a ? [...a.classList].find(c => c.startsWith('st-key-')) : null; }""")
+
+
 def test_desktop_spotlight_tour(visitor):
     v = visitor()
     p = v.page
     assert p.get_by_text(WELCOME).is_visible()
     assert v.button("Run Simulation").is_enabled()  # the app is usable while the welcome card is shown
+    inputs_before = p.evaluate(SIDEBAR_INPUTS)
 
     v.button("Start tour").click()
-    assert v.popover_progress() == "1 of 5"
-    assert p.locator(".driver-popover-title").inner_text() == "Choose your stocks"
-    assert_highlight_on_screen(p)
+    assert v.popover_progress() == f"1 of {len(TITLES)}"
     assert p.locator(".driver-popover-prev-btn").inner_text() == "Back"
-
     p.locator(".driver-popover-next-btn").click()
-    assert v.popover_progress() == "2 of 5"
-    assert_highlight_on_screen(p)
+    assert v.popover_progress() == f"2 of {len(TITLES)}"
     p.locator(".driver-popover-prev-btn").click()
-    assert v.popover_progress() == "1 of 5"
+    assert v.popover_progress() == f"1 of {len(TITLES)}"
 
-    for expected in ["2 of 5", "3 of 5", "4 of 5", "5 of 5"]:
-        p.locator(".driver-popover-next-btn").click()
-        assert v.popover_progress() == expected
+    for i, title in enumerate(TITLES):
+        if i:
+            p.locator(".driver-popover-next-btn").click()
+        assert v.popover_progress() == f"{i + 1} of {len(TITLES)}"
+        assert p.locator(".driver-popover-title").inner_text() == title
+        if i < len(TARGETS):
+            # each sidebar step highlights its own control, scrolled into view
+            assert highlighted_key(p) == TARGETS[i]
+            assert_highlight_on_screen(p)
+        else:
+            assert highlighted_key(p) is None  # the finish card highlights nothing
+        if title == "Set up the portfolio":
+            assert p.locator(".driver-active-element").get_by_text("Portfolio Allocations").count() >= 1
+        if title == "Compare strategies":
+            text = p.locator(".driver-popover-description").inner_text()
+            assert "Always Cash" in text and "Always Hold" in text and "not a prediction" in text
+        if title == "Run a simulation":
+            assert "chart of portfolio value" in p.locator(".driver-popover-description").inner_text()
+
     assert p.locator(".driver-popover-next-btn").inner_text() == "Done"
     p.locator(".driver-popover-next-btn").click()
     p.locator(".driver-popover").wait_for(state="detached", timeout=10000)
 
-    # the tour never runs a simulation
+    # the tour never changes inputs or runs a simulation
     p.wait_for_timeout(1000)
+    assert p.evaluate(SIDEBAR_INPUTS) == inputs_before
     assert p.locator(".js-plotly-plot").count() == 0
+    assert p.locator('[data-testid="stExpanderDetails"]').count() == 0 or \
+        not p.get_by_text("Update Stocks").is_visible()  # the allocations expander stays closed
 
     # the welcome card does not come back after a refresh, but the tour can be replayed
     v.open()
@@ -194,33 +225,41 @@ def test_results_step_highlights_results(visitor):
 
     v.button("Take a tour").click()
     v.popover_progress()
-    for expected in ["2 of 5", "3 of 5", "4 of 5"]:
+    for i in range(1, TITLES_WITH_RESULTS.index("Read the results") + 1):
         p.locator(".driver-popover-next-btn").click()
-        assert v.popover_progress() == expected
-    assert p.locator(".driver-popover-title").inner_text() == "Explore the results"
+        assert v.popover_progress() == f"{i + 1} of {len(TITLES_WITH_RESULTS)}"
+    assert p.locator(".driver-popover-title").inner_text() == "Read the results"
+    assert highlighted_key(p) == "st-key-tour_results"
+    highlighted = p.locator(".driver-active-element")
+    assert highlighted.get_by_text("From 2024-07-10 to 2024-07-18").count() == 1  # the first result section
     box = p.evaluate(HIGHLIGHT_BOX)
-    assert box and box["left"] > p.locator('[data-testid="stSidebar"]').bounding_box()["width"]
+    assert box["left"] > p.locator('[data-testid="stSidebar"]').bounding_box()["width"]
+    assert box["top"] < box["vh"] and box["bottom"] > 0
     p.keyboard.press("Escape")
     assert p.locator(".js-plotly-plot").count() == 4  # results are unchanged by the tour
     v.assert_clean()
 
 
-def run_walkthrough(v):
+def run_walkthrough(v, titles=TITLES):
     p = v.page
     dialog = p.get_by_role("dialog")
     dialog.wait_for(timeout=20000)
     p.wait_for_timeout(500)
     assert p.locator(".driver-popover").count() == 0
     assert p.locator(".driver-active-element").count() == 0
-    assert "1 of 5" in dialog.inner_text() and "Choose your stocks" in dialog.inner_text()
+    total = len(titles)
+    assert f"1 of {total}" in dialog.inner_text() and titles[0] in dialog.inner_text()
 
     dialog.get_by_role("button", name="Next").click()
-    p.get_by_text("2 of 5").wait_for(timeout=10000)
+    p.get_by_text(f"2 of {total}").wait_for(timeout=10000)
     dialog.get_by_role("button", name="Back").click()
-    p.get_by_text("1 of 5").wait_for(timeout=10000)
-    for n in range(2, 6):
+    p.get_by_text(f"1 of {total}").wait_for(timeout=10000)
+    for n in range(2, total + 1):
         dialog.get_by_role("button", name="Next").click()
-        p.get_by_text(f"{n} of 5").wait_for(timeout=10000)
+        p.get_by_text(f"{n} of {total}").wait_for(timeout=10000)
+        assert titles[n - 1] in dialog.inner_text()
+        if titles[n - 1] == "Compare strategies":
+            assert "Dory" in dialog.inner_text() and "not a prediction" in dialog.inner_text()
     dialog.get_by_role("button", name="Done").click()
     dialog.wait_for(state="detached", timeout=10000)
     assert p.locator(".driver-active-element").count() == 0
@@ -229,22 +268,38 @@ def run_walkthrough(v):
 def test_narrow_viewport_uses_walkthrough(visitor):
     v = visitor(PHONE)
     p = v.page
+    inputs_before = p.evaluate(SIDEBAR_INPUTS)
     assert p.get_by_text(WELCOME).is_visible()
     v.button("Start tour").click()
     assert "Tap » at the top left" in p.get_by_role("dialog").inner_text()
     run_walkthrough(v)
     assert p.locator(".js-plotly-plot").count() == 0
+    assert p.evaluate(SIDEBAR_INPUTS) == inputs_before
 
     # skip from the middle of the walkthrough
     v.button("Take a tour").click()
     dialog = p.get_by_role("dialog")
     dialog.get_by_role("button", name="Next").click()
-    p.get_by_text("2 of 5").wait_for(timeout=10000)
+    p.get_by_text(f"2 of {len(TITLES)}").wait_for(timeout=10000)
     dialog.get_by_role("button", name="Skip").click()
     dialog.wait_for(state="detached", timeout=10000)
 
     v.open()
     assert p.get_by_text(WELCOME).count() == 0
+    v.assert_clean()
+
+
+def test_narrow_viewport_walkthrough_with_results(visitor):
+    v = visitor(PHONE)
+    p = v.page
+    v.button("No thanks").click()
+    p.get_by_test_id("stExpandSidebarButton").click()  # open the sidebar to run a simulation, as a visitor would
+    v.button("Run Simulation").click()
+    p.get_by_test_id("stSidebarCollapseButton").locator("button").click()
+    p.get_by_text("Period: 26 Weeks (ending 2024-09-05)").wait_for(timeout=120000)
+    p.wait_for_timeout(1500)
+    v.button("Take a tour").click()
+    run_walkthrough(v, TITLES_WITH_RESULTS)
     v.assert_clean()
 
 
@@ -266,12 +321,12 @@ def test_shrinking_window_mid_tour_never_highlights_hidden_controls(visitor):
     v.button("Start tour").click()
     v.popover_progress()
     p.locator(".driver-popover-next-btn").click()
-    assert v.popover_progress() == "2 of 5"
+    assert v.popover_progress() == f"2 of {len(TITLES)}"
 
     p.set_viewport_size(PHONE)
     dialog = p.get_by_role("dialog")
     dialog.wait_for(timeout=20000)
-    assert "Compare strategies" in dialog.inner_text()  # continues at the same step
+    assert TITLES[1] in dialog.inner_text()  # continues at the same step
     p.wait_for_timeout(1000)
     assert p.locator(".driver-popover").count() == 0
     assert p.locator(".driver-active-element").count() == 0

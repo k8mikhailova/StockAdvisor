@@ -10,6 +10,7 @@ this browser has already seen the welcome card (a single "seen" flag in localSto
 The tour only explains the interface. It never clicks buttons, runs simulations, sends emails or calls external APIs.
 """
 import logging
+import re
 import streamlit as st
 
 try:
@@ -20,7 +21,10 @@ except Exception:  # the app keeps working without the tour package
 logger = logging.getLogger(__name__)
 
 # keys of the containers that wrap the existing controls in main.py
+PAGES_KEY = "tour_pages"
 INPUTS_KEY = "tour_inputs"
+SIMULATION_KEY = "tour_simulation"
+PORTFOLIO_KEY = "tour_portfolio"
 ADVISORS_KEY = "tour_advisors"
 RUN_KEY = "tour_run"
 RESULTS_KEY = "tour_results"  # wraps the first result section
@@ -30,24 +34,71 @@ SPOTLIGHT_MIN_WIDTH = 768  # below this, Streamlit shows the sidebar as an overl
 WELCOME_TEXT = ("StockAdvisor lets you compare simple investment strategies using historical stock data. "
                 "Want a quick walkthrough?")
 
+# step text uses **bold** and line breaks, shown as markdown in the walkthrough and as HTML in the spotlight tour
 # (title, text, container key or None, control lives in the sidebar)
-STEPS = [
-    ("Choose your stocks",
-     "Pick the stocks and time period you want to explore. The demo includes AAPL and NVDA prices from 2023 to 2024, "
-     "and I've already filled in an example to get you started.", INPUTS_KEY, True),
-    ("Compare strategies",
-     "Each advisor follows a different approach to managing the portfolio. Select the ones you'd like to compare.",
-     ADVISORS_KEY, True),
-    ("Run a simulation",
-     "Click Run Simulation to see how the selected strategies perform when they start with the same portfolio "
-     "($1,000 by default).", RUN_KEY, True),
-    ("Explore the results",
-     "Once you run a simulation, you can compare the portfolio values, returns, and charts for each strategy.",
-     RESULTS_KEY, False),
-    ("You're all set!",
-     "Try changing the stocks, dates, or strategies to see how the results change. "
-     "You can replay this tour anytime with \"Take a tour\".", None, False),
-]
+PAGES_STEP = (
+    "Two pages",
+    "**Simulator**, where you are now, compares the strategies. **Email Settings** is where you'd schedule a "
+    "daily email report. In this demo it only keeps your settings for this visit and never sends email.",
+    PAGES_KEY, True)
+INPUTS_STEP = (
+    "Choose stocks and data",
+    "Pick the stocks and the range of price data to work with. The demo has daily AAPL and NVDA prices from "
+    "January 2023 to September 2024, and I've already filled in an example.",
+    INPUTS_KEY, True)
+SIMULATION_STEP = (
+    "Pick what to test",
+    "The simulation dates choose which stretch of that data the strategies are tested on, so they need to fall "
+    "inside the range above. **Periods** add extra tests over the last 1, 4 and 26 weeks of the data, "
+    "each with its own results.",
+    SIMULATION_KEY, True)
+PORTFOLIO_STEP = (
+    "Set up the portfolio",
+    "**Initial Portfolio Value** is the total you start with. **Portfolio Allocations** (the expander below) "
+    "splits it between the stocks and cash. The example puts $1,000 50/50 into AAPL and NVDA, so each gets $500. "
+    "Commission and tax are recorded but not applied yet.",
+    PORTFOLIO_KEY, True)
+ADVISORS_STEP = (
+    "Compare strategies",
+    "**Always Cash** sells everything on the first day and stays in cash, a no-risk baseline.\n"
+    "**Always Hold** keeps the starting shares and never trades.\n"
+    "**Dory** moves everything into the stock that rose most from open to close that day, or into cash if none "
+    "rose. It decides and trades using that day's closing prices, so it reacts to what already happened. "
+    "It's a simple rule, not a prediction.",
+    ADVISORS_KEY, True)
+RUN_STEP = (
+    "Run a simulation",
+    "Click **Run Simulation** to test the selected strategies with the same starting portfolio. For your dates and "
+    "for each period, you'll get a chart of portfolio value over time and a table with each strategy's final value "
+    "and % return.",
+    RUN_KEY, True)
+RESULTS_STEP = (
+    "Read the results",
+    "Each line shows how one strategy's portfolio value changed day by day. The summary table compares final value "
+    "and % return (\"Initial\" is the starting point), and \"View original data\" shows the daily holdings.",
+    RESULTS_KEY, False)
+FINISH_STEP = (
+    "You're all set!",
+    "Try different dates, allocations or strategies to see how the results change. "
+    "You can replay this tour anytime with \"Take a tour\".",
+    None, False)
+
+
+def steps_for(has_results):
+    """The tour steps in sidebar order. The results step is only included when there are results to highlight."""
+    steps = [PAGES_STEP, INPUTS_STEP, SIMULATION_STEP, PORTFOLIO_STEP, ADVISORS_STEP, RUN_STEP]
+    if has_results:
+        steps.append(RESULTS_STEP)
+    return steps + [FINISH_STEP]
+
+
+def _as_html(text):
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text).replace("\n", "<br>")
+
+
+def _as_markdown(text):
+    return text.replace("\n", "  \n")
+
 
 ENV_JS = """
 export default function (component) {
@@ -71,8 +122,8 @@ export default function (component) {
       const r = target.getBoundingClientRect();
       sidebarVisible = r.width > 0 && r.height > 0 && r.left >= 0 && r.right <= width;
     }
-    return { width: width, sidebar_visible: sidebarVisible,
-             spotlight: sidebarVisible && width >= %(min_width)d, seen: parentElement.__stockadvisorTourSeen };
+    // only values the tour uses, so ordinary resizing or opening the sidebar on a phone does not cause reruns
+    return { spotlight: sidebarVisible && width >= %(min_width)d, seen: parentElement.__stockadvisorTourSeen };
   };
   const report = () => {
     const env = measure();
@@ -98,10 +149,11 @@ body .driver-popover {
   color: #31333f;
   border-radius: 12px;
   padding: 16px 18px 14px;
-  max-width: 300px;
+  max-width: 320px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
 }
 body .driver-popover-title { font: inherit; font-size: 1rem; font-weight: 600; }
+body .driver-popover-description b { font-family: inherit; font-weight: 600; }
 body .driver-popover-description { font: inherit; font-size: 0.9rem; line-height: 1.45; margin-top: 6px; }
 body .driver-popover-progress-text { font-size: 0.8rem; color: #6b6f7b; }
 body .driver-popover-footer { margin-top: 14px; }
@@ -168,8 +220,8 @@ def render_entry(env):
 
 
 def _sidebar_hint(env):
-    if env and env.get("sidebar_visible"):
-        return "You'll find this in the sidebar on the left."
+    if env is None:
+        return "You'll find this in the sidebar."
     return "This is in the sidebar. Tap » at the top left to open it."
 
 
@@ -178,14 +230,15 @@ def _end_walkthrough():
 
 
 @st.dialog("Quick tour", width="small", on_dismiss=_end_walkthrough)
-def _walkthrough(env):
-    step = st.session_state.get("tour_walk_step", 0)
-    title, text, _, in_sidebar = STEPS[step]
-    last = step == len(STEPS) - 1
+def _walkthrough(env, has_results):
+    steps = steps_for(has_results)
+    step = min(st.session_state.get("tour_walk_step", 0), len(steps) - 1)
+    title, text, _, in_sidebar = steps[step]
+    last = step == len(steps) - 1
 
-    st.caption(f"{step + 1} of {len(STEPS)}")
+    st.caption(f"{step + 1} of {len(steps)}")
     st.markdown(f"**{title}**")
-    st.write(text)
+    st.markdown(_as_markdown(text))
     if in_sidebar:
         st.caption(_sidebar_hint(env))
 
@@ -206,13 +259,14 @@ def _walkthrough(env):
 
 def _spotlight_steps(has_results):
     steps = []
-    for i, (title, text, key, in_sidebar) in enumerate(STEPS):
-        if key and (key != RESULTS_KEY or has_results):
-            step = Tour.bind(key, title=title, desc=text, side="right" if in_sidebar else "left")
+    tour_steps = steps_for(has_results)
+    for i, (title, text, key, in_sidebar) in enumerate(tour_steps):
+        if key:
+            step = Tour.bind(key, title=title, desc=_as_html(text), side="right" if in_sidebar else "left")
         else:
-            step = Tour.info(title=title, desc=text)  # centered card, nothing highlighted
+            step = Tour.info(title=title, desc=_as_html(text))  # centered card, nothing highlighted
         # Driver.js button labels, matching the walkthrough
-        step.popover.update(prevBtnText="Back", nextBtnText="Done" if i == len(STEPS) - 1 else "Next")
+        step.popover.update(prevBtnText="Back", nextBtnText="Done" if i == len(tour_steps) - 1 else "Next")
         steps.append(step)
     return steps
 
@@ -242,7 +296,7 @@ def run(env, has_results):
                 st.session_state.tour_walk_active = True
 
     if st.session_state.get("tour_walk_active"):
-        _walkthrough(env)
+        _walkthrough(env, has_results)
 
 
 def is_tour_key(key):

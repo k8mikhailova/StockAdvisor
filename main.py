@@ -39,7 +39,8 @@ reload_changed_modules()
 
 from config import DEFAULT_CALCULATION_TIME, DEFAULT_EMAIL_TIME, DEMO_MODE, HISTORICAL_DATA_PATH
 from helper_functions import (validate_tickers, plot_simulation_results, read_and_display, save_email_settings,
-                              save_email_parameters)
+                              save_email_parameters, summarize_portfolio)
+import pandas as pd
 from simulator import get_csv
 from data_fetcher import load_historical_data
 import demo_tour
@@ -303,39 +304,36 @@ else:
 
     # ---------------- main area ----------------
     st.title("StockAdvisor")
-    st.write("Compare simple investment strategies on historical stock prices. Choose a portfolio and test dates "
-             "in the sidebar, then run a simulation to see how each strategy would have managed the same "
-             "starting money.")
+    st.write("Compare simple investment strategies on historical stock prices. The example below is ready to run, "
+             "or change the settings in the sidebar.")
     if DEMO_MODE:
         st.caption(DATA_NOTE)
         tour_slot = st.container()  # welcome card for first-time visitors
 
     with st.container(key=demo_tour.RUN_KEY):
-        st.subheader("Your simulation")
-        stats = st.columns(3)
-        stats[0].metric("Starting value", f"${initial_value:,.0f}")
-        stats[1].metric("Stocks", ", ".join(tickers_list) or "None")
-        stats[2].metric("Strategies", f"{len(selected_advisors)} of {len(ui.ADVISORS)}")
+        st.markdown("#### Your portfolio")
+        st.markdown(f"Starting value **${initial_value:,.0f}** · Stocks **{', '.join(tickers_list) or 'none'}** · "
+                    f"**{len(selected_advisors)} of {len(ui.ADVISORS)}** strategies selected")
         ui.allocation_bar(allocations)
 
+        st.markdown("#### Compare strategies")
+        ui.strategy_overview(selected_advisors)
+
+        # the one simulation action (the button label already names the section)
+        run_clicked = st.button("Run simulation", type="primary", icon=":material/play_arrow:", key="run_simulation")
+        tests = f"{len(windows)} test{'' if len(windows) == 1 else 's'}"
+        st.caption(f"Runs {tests} on the saved historical prices, then shows a chart and summary table for each "
+                   f"one below." if DEMO_MODE else f"Runs {tests} with fresh market data, then shows the results "
+                                                    f"below.")
         if windows:
             parts = [windows[0][0]] if simulation_start_date and simulation_end_date else []
             if periods:
                 weeks = "week" if periods == [1] else "weeks"
                 parts.append(f"the last {ui.join_words([str(p) for p in periods])} {weeks} of data "
                              f"(to {ui.format_date(today)})")
-            st.markdown(f"**Test windows:** {', plus '.join(parts)}")
+            st.caption(f"Test windows: {', plus '.join(parts)}")
         else:
-            st.markdown("**Test windows:** none yet. Set test dates or periods in the sidebar.")
-
-        ui.strategy_list(selected_advisors)
-
-        with st.container(horizontal=True, vertical_alignment="center"):
-            run_clicked = st.button("Run simulation", type="primary", icon=":material/play_arrow:",
-                                    key="run_simulation")
-            st.caption(f"Runs {len(windows)} test{'' if len(windows) == 1 else 's'} on saved historical prices. "
-                       f"It takes a few seconds." if DEMO_MODE else
-                       f"Runs {len(windows)} test{'' if len(windows) == 1 else 's'} with fresh market data.")
+            st.caption("No test windows yet. Set test dates or periods in the sidebar.")
 
     def run_and_store(window_start, window_end, csv_path, tab_label):
         """Run the simulation for one period and remember the result for this session."""
@@ -408,6 +406,21 @@ else:
             if st.session_state.get("results_settings") != current_settings:
                 st.caption(":material/sync: Your settings have changed since this run. Run the simulation again "
                            "to update these results.")
+            # compact comparison: the % return each strategy reached in every test window (from the same summaries
+            # shown in the tabs)
+            comparison = {}
+            for result in results:
+                summary = summarize_portfolio(result['csv_path'])
+                for _, row in summary[summary['Advisor'].isin(result['advisors'])].iterrows():
+                    comparison.setdefault(ui.advisor_name(row['Advisor']), {})[result['tab_label']] = row['% Return']
+            comparison_df = pd.DataFrame.from_dict(comparison, orient="index")
+            comparison_df = comparison_df.reindex(columns=[r['tab_label'] for r in results])
+            comparison_df.index.name = "Strategy"
+            st.dataframe(comparison_df.reset_index(), hide_index=True,
+                         column_config={col: st.column_config.NumberColumn(format="%.2f%%")
+                                        for col in comparison_df.columns})
+            st.caption("% return in each test window. Open a tab below for the chart, final values and daily data.")
+
             with st.container(key=demo_tour.RESULTS_KEY):
                 tabs = st.tabs([r['tab_label'] for r in results])
                 for tab, result in zip(tabs, results):

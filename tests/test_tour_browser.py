@@ -83,7 +83,7 @@ class Visitor:
 
     def open(self):
         self.page.goto(self.url, wait_until="networkidle")
-        self.page.get_by_text("Your simulation").wait_for(timeout=60000)
+        self.page.get_by_text("Your portfolio").wait_for(timeout=60000)
         self.page.wait_for_timeout(2500)  # let the tour helper report the viewport
 
     def button(self, name):
@@ -326,7 +326,7 @@ def test_run_scrolls_to_results_and_settings_update_summary(visitor, viewport):
     value = p.get_by_label("Initial portfolio value (USD)")
     value.fill("2500")
     value.press("Enter")
-    p.get_by_test_id("stMetric").filter(has_text="$2,500").wait_for(timeout=10000)
+    p.get_by_text("Starting value $2,500").wait_for(timeout=10000)
     if viewport is PHONE:
         p.get_by_test_id("stSidebarCollapseButton").locator("button").click()
         p.wait_for_timeout(800)
@@ -354,9 +354,9 @@ def test_reset_demo_restores_defaults_on_phone(visitor):
     value = p.get_by_label("Initial portfolio value (USD)")
     value.fill("4000")
     value.press("Enter")
-    p.get_by_test_id("stMetric").filter(has_text="$4,000").wait_for(timeout=10000)
+    p.get_by_text("Starting value $4,000").wait_for(timeout=10000)
     v.button("Reset demo").click()
-    p.get_by_test_id("stMetric").filter(has_text="$1,000").wait_for(timeout=10000)
+    p.get_by_text("Starting value $1,000").wait_for(timeout=10000)
     assert p.get_by_text(WELCOME).count() == 0  # the tour choice is kept
     v.assert_clean()
 
@@ -365,7 +365,7 @@ def test_tour_cards_follow_dark_theme(browser, app_url):
     context = browser.new_context(viewport=DESKTOP, color_scheme="dark")
     p = context.new_page()
     p.goto(app_url, wait_until="networkidle")
-    p.get_by_text("Your simulation").wait_for(timeout=60000)
+    p.get_by_text("Your portfolio").wait_for(timeout=60000)
     p.wait_for_timeout(2500)
     p.get_by_role("button", name="Start tour").click()
     p.locator(".driver-popover").wait_for(timeout=20000)

@@ -2,12 +2,23 @@
 import html
 import streamlit as st
 
-# strategy names and one-line descriptions, in the order the advisors are offered
+# strategy names and short descriptions, in the order the advisors are offered
 ADVISORS = {
-    "always_cash": ("Always Cash", "Sells all stocks on the first day and holds cash, a no-risk baseline."),
-    "always_hold": ("Always Hold", "Keeps the starting shares for the whole period without trading."),
-    "dory": ("Dory", "Each day, moves everything into the stock that rose most from open to close, or into cash "
-                     "if none rose. It reacts to past moves, so it isn't a prediction."),
+    "always_cash": ("Always Cash", "Sells everything on the first day and holds cash."),
+    "always_hold": ("Always Hold", "Keeps the starting shares without trading."),
+    "dory": ("Dory", "A hindsight benchmark that follows each day's biggest gainer."),
+}
+
+# longer explanations, checked against advisor_1.py, advisor_2.py and advisor_3.py
+ADVISOR_DETAILS = {
+    "always_cash": "Sells all stocks at the first trading day's closing price and keeps the money in cash for the "
+                   "rest of the test. Cash earns no interest in the simulation.",
+    "always_hold": "Keeps the shares bought at the start and never trades, so the portfolio moves with the stock "
+                   "prices.",
+    "dory": "Each trading day, compares every stock's change from that day's open to its close and moves the whole "
+            "portfolio into the biggest gainer, or into cash if none rose. It decides using that day's closing "
+            "prices and trades at those same prices, which you only know once the day is over. Treat it as a "
+            "hindsight benchmark, not a strategy you could follow in real time.",
 }
 
 # validated categorical slots (light, dark) for the allocation bar; cash uses a neutral gray
@@ -74,14 +85,15 @@ def allocation_bar(allocations):
         unsafe_allow_html=True)
 
 
-def strategy_list(selected_advisors):
-    lines = []
-    for advisor, (name, description) in ADVISORS.items():
-        if advisor in selected_advisors:
-            lines.append(f":material/check_circle: **{name}**: {description}")
-        else:
-            lines.append(f":gray[:material/radio_button_unchecked: **{name}** (not selected): {description}]")
-    st.markdown("\n\n".join(lines))
+def strategy_overview(selected_advisors):
+    """One short line per selected strategy, with the full explanations in an expander."""
+    lines = [f"- **{name}**: {short}" for advisor, (name, short) in ADVISORS.items() if advisor in selected_advisors]
+    st.markdown("\n".join(lines) if lines else "No strategies selected. Choose at least one in the sidebar.")
+    not_selected = [name for advisor, (name, _) in ADVISORS.items() if advisor not in selected_advisors]
+    if not_selected and lines:
+        st.caption(f"Not selected: {', '.join(not_selected)}")
+    with st.expander("How the strategies work"):
+        st.markdown("\n\n".join(f"**{name}**: {ADVISOR_DETAILS[advisor]}" for advisor, (name, _) in ADVISORS.items()))
 
 
 def join_words(words):

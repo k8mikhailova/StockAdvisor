@@ -58,23 +58,23 @@ SIMULATION_STEP = (
     SIMULATION_KEY, True)
 ADVISORS_STEP = (
     "Compare strategies",
-    "**Always Cash** sells everything on the first day and stays in cash, a no-risk baseline.\n"
+    "**Always Cash** sells everything on the first day and holds cash.\n"
     "**Always Hold** keeps the starting shares and never trades.\n"
     "**Dory** moves everything into the stock that rose most from open to close that day, or into cash if none "
-    "rose. It decides and trades using that day's closing prices, so it reacts to what already happened. "
-    "It's a simple rule, not a prediction.",
+    "rose. It uses that day's closing prices, which you only know once the day is over, so treat it as a "
+    "hindsight benchmark, not a prediction.",
     ADVISORS_KEY, True)
 RUN_STEP = (
     "Check and run",
-    "This summary updates as you change the settings. Click **Run simulation** to test the selected strategies. "
-    "For each test window you'll get a chart of portfolio value over time and a table with each strategy's final "
-    "value and % return.",
+    "This summary follows your settings, and \"How the strategies work\" has the details. Click "
+    "**Run simulation** to test the selected strategies. For each test window you'll get a chart of portfolio "
+    "value over time and a table with each strategy's final value and % return.",
     RUN_KEY, False)
 RESULTS_STEP = (
     "Read the results",
-    "Each tab is one test window. The chart shows how each strategy's portfolio value changed day by day, and the "
-    "table compares final value and % return (\"Initial\" is the starting point). "
-    "\"View daily data\" shows the daily holdings.",
+    "The table above compares every strategy's % return across the test windows. Each tab is one window: the "
+    "chart shows portfolio value day by day, the table has final value and % return (\"Initial\" is the "
+    "starting point), and \"View daily data\" shows the daily holdings.",
     RESULTS_KEY, False)
 FINISH_STEP = (
     "You're all set!",

@@ -62,8 +62,8 @@ def run_simulation(at):
     assert not at.exception, at.exception
 
 
-def metrics(at):
-    return {m.label: m.value for m in at.metric}
+def portfolio_line(at):
+    return next(m.value for m in at.markdown if m.value.startswith("Starting value"))
 
 
 def test_app_starts_in_demo_mode():
@@ -71,8 +71,13 @@ def test_app_starts_in_demo_mode():
     assert at.title[0].value == "StockAdvisor"
     assert any("Demo data" in c.value for c in at.caption)
     assert at.text_input(key="set_tickers").value == "AAPL, NVDA"
-    assert metrics(at) == {"Starting value": "$1,000", "Stocks": "AAPL, NVDA", "Strategies": "3 of 3"}
-    assert any("Test windows" in m.value and "Jul 10 – Jul 18, 2024" in m.value for m in at.markdown)
+    assert portfolio_line(at) == "Starting value **$1,000** · Stocks **AAPL, NVDA** · **3 of 3** strategies selected"
+    assert [m.value for m in at.main.markdown if m.value.startswith("#### ")] == ["#### Your portfolio",
+                                                                                "#### Compare strategies"]
+    assert any(c.value.startswith("Test windows: Jul 10 – Jul 18, 2024") for c in at.caption)
+    assert [e.label for e in at.expander] == ["How the strategies work"]
+    page_text = " ".join(m.value for m in at.markdown)
+    assert "no-risk" not in page_text and "hindsight benchmark" in page_text
     assert not at.error
     # one simulation action, in the main area
     assert [b.label for b in at.button].count("Run simulation") == 1
@@ -90,13 +95,12 @@ def test_summary_follows_the_settings():
     at = start_app()
     at.number_input(key="set_value").set_value(2500).run()
     at.checkbox(key="adv_dory").uncheck().run()
-    assert metrics(at)["Starting value"] == "$2,500"
-    assert metrics(at)["Strategies"] == "2 of 3"
-    assert any("(not selected)" in m.value and "Dory" in m.value for m in at.markdown)
+    assert "**$2,500**" in portfolio_line(at) and "**2 of 3**" in portfolio_line(at)
+    assert any(c.value == "Not selected: Dory" for c in at.caption)
 
     # the allocations follow the stock symbols
     at.text_input(key="set_tickers").set_value("AAPL").run()
-    assert metrics(at)["Stocks"] == "AAPL"
+    assert "Stocks **AAPL** ·" in portfolio_line(at)
     assert "alloc_NVDA" not in [n.key for n in at.number_input]
     assert any("add up to 50%" in e.value for e in at.sidebar.error)
     at.number_input(key="alloc_AAPL").set_value(70).run()
@@ -105,7 +109,7 @@ def test_summary_follows_the_settings():
     assert any("AAPL 70%" in m.value and "Cash 30%" in m.value for m in at.markdown)
 
     at.text_input(key="set_periods").set_value("2").run()
-    assert any("the last 2 weeks of data" in m.value for m in at.markdown)
+    assert any("the last 2 weeks of data" in c.value for c in at.caption)
 
 
 def test_run_simulation_renders_all_strategies():
@@ -117,13 +121,21 @@ def test_run_simulation_renders_all_strategies():
     assert len(at.get("plotly_chart")) == 4
     assert not at.error
 
-    # the summary table compares the three strategies and matches the results committed in the repository
-    summary = at.dataframe[0].value
+    # the comparison table shows each strategy's % return in every test window
+    comparison = at.dataframe[0].value
+    assert list(comparison.columns) == ["Strategy", "Jul 10 – Jul 18, 2024", "Last 1 week", "Last 4 weeks",
+                                        "Last 26 weeks"]
+    assert list(comparison["Strategy"]) == ["Always Cash", "Always Hold", "Dory"]
+
+    # the first tab's summary table matches the results committed in the repository
+    summary = at.dataframe[1].value
     assert {"Always Cash", "Always Hold", "Dory"} <= set(summary["Advisor"])
     reference = pd.read_csv(os.path.join(APP_DIR, "simulation_results_1.csv"))
     expected_dory = reference[reference["Advisor"] == "dory"].iloc[-1]["Portfolio Value USD"]
     actual_dory = summary[summary["Advisor"] == "Dory"].iloc[0]["Final Portfolio Value"]
     assert actual_dory == pytest.approx(expected_dory, abs=1e-3)
+    expected_return = round((expected_dory - 1000) / 1000 * 100, 2)
+    assert comparison.set_index("Strategy").loc["Dory", "Jul 10 – Jul 18, 2024"] == pytest.approx(expected_return)
 
     # results stay visible when other inputs change, with a note that they are out of date
     at.number_input(key="set_value").set_value(2000).run()
@@ -133,7 +145,7 @@ def test_run_simulation_renders_all_strategies():
     # run again with the new settings
     run_simulation(at)
     assert not any("settings have changed" in c.value for c in at.caption)
-    assert at.dataframe[0].value.iloc[0]["Final Portfolio Value"] == 2000
+    assert at.dataframe[1].value.iloc[0]["Final Portfolio Value"] == 2000
 
 
 def test_invalid_inputs_show_errors_not_exceptions():
@@ -201,7 +213,7 @@ def test_reset_demo_and_session_isolation():
     click(first, "Reset demo")
     assert not first.get("plotly_chart")
     assert not os.path.exists(old_dir)
-    assert metrics(first)["Starting value"] == "$1,000"  # defaults are restored
+    assert "**$1,000**" in portfolio_line(first)  # defaults are restored
 
 
 def test_take_a_tour_never_runs_anything():

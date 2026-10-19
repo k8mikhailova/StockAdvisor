@@ -31,7 +31,10 @@ RESULTS_KEY = "tour_results"  # wraps the result tabs
 
 SPOTLIGHT_MIN_WIDTH = 768  # below this, Streamlit shows the sidebar as an overlay
 
-WELCOME_TEXT = "Want a quick walkthrough of the settings and strategies?"
+WELCOME_TITLE = "Welcome to StockAdvisor"
+WELCOME_TEXT = ("StockAdvisor compares simple investment strategies on historical stock prices. A quick tour "
+                "(about a minute) shows where the settings are and how to read the results. You can replay it "
+                "anytime with \"Take a tour\".")
 
 # step text uses **bold** and line breaks, shown as markdown in the walkthrough and as HTML in the spotlight tour
 # (title, text, container key or None, control lives in the sidebar)
@@ -112,6 +115,16 @@ export default function (component) {
   }
   if (data && data.mark_seen && store) {
     try { store.setItem(STORAGE_KEY, "1"); } catch (e) {}
+  }
+  // remember the choice the moment a tour button is clicked, so an immediate refresh doesn't show the welcome again
+  if (!window.__stockadvisorTourClicks) {
+    window.__stockadvisorTourClicks = true;
+    document.addEventListener("click", (event) => {
+      if (event.target.closest && event.target.closest(".st-key-tour_start, .st-key-tour_skip, " +
+                                                       ".st-key-tour_replay, .st-key-tour_replay_main")) {
+        try { window.localStorage.setItem(STORAGE_KEY, "1"); } catch (e) {}
+      }
+    }, true);
   }
   // tour cards follow the app theme
   document.body.classList.toggle("stockadvisor-dark", !!(data && data.dark));
@@ -224,18 +237,29 @@ def _skip():
     st.session_state.tour_seen = True
 
 
-def render_welcome(env):
-    """The welcome card for first-time visitors."""
-    if env is not None and not env.get("seen") and not _session_seen():
-        with st.container(border=True, key="tour_welcome"):
-            st.markdown(WELCOME_TEXT)
-            with st.container(horizontal=True):
-                st.button("Start tour", type="primary", on_click=_start, key="tour_start")
-                st.button("No thanks", type="tertiary", on_click=_skip, key="tour_skip")
+@st.dialog(WELCOME_TITLE, width="small", on_dismiss=_skip)
+def _welcome():
+    """Shown automatically on a first visit. Closing it counts as skipping, so it doesn't come back."""
+    st.write(WELCOME_TEXT)
+    with st.container(horizontal=True):
+        if st.button("Start the tour", type="primary", key="tour_start"):
+            _start()
+            st.rerun()
+        if st.button("Skip for now", type="tertiary", key="tour_skip"):
+            _skip()
+            st.rerun()
 
 
-def render_replay_button():
-    st.button("Take a tour", type="tertiary", icon=":material/explore:", on_click=_start, key="tour_replay")
+def _first_visit(env):
+    """
+    A first visit: this browser has never chosen to start or skip the tour. The browser helper reads that from
+    localStorage on page load, so nothing is shown until it has reported (returning visitors never see a flash).
+    """
+    return env is not None and not env.get("seen") and not _session_seen()
+
+
+def render_replay_button(key="tour_replay"):
+    st.button("Take a tour", type="tertiary", icon=":material/explore:", on_click=_start, key=key)
 
 
 def _sidebar_hint(env):
@@ -326,6 +350,8 @@ def run(env, has_results):
 
     if st.session_state.get("tour_walk_active"):
         _walkthrough(env, has_results)
+    elif _first_visit(env) and not st.session_state.get("tour_spotlight_pending"):
+        _welcome()
 
 
 def is_tour_key(key):

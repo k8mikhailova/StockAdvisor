@@ -308,7 +308,7 @@ else:
              "or change the settings in the sidebar.")
     if DEMO_MODE:
         st.caption(DATA_NOTE)
-        tour_slot = st.container()  # welcome card for first-time visitors
+        demo_tour.render_replay_button(key="tour_replay_main")  # visible on phones, where the sidebar is closed
 
     with st.container(key=demo_tour.RUN_KEY):
         st.markdown("#### Your portfolio")
@@ -444,6 +444,5 @@ if DEMO_MODE:
 with st.sidebar:
     tour_env = demo_tour.mount_env(scroll_to=st.session_state.pop("scroll_to_results_pending", None))
 if DEMO_MODE and page == "Simulator":
-    with tour_slot:
-        demo_tour.render_welcome(tour_env)
+    # the active tour, or the welcome dialog on a first visit
     demo_tour.run(tour_env, has_results=bool(st.session_state.get('results')))

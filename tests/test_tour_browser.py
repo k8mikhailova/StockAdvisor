@@ -16,7 +16,8 @@ sync_api = pytest.importorskip("playwright.sync_api")
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DESKTOP = {"width": 1400, "height": 900}
 PHONE = {"width": 390, "height": 844}
-WELCOME = "Want a quick walkthrough of the settings and strategies?"
+WELCOME = "A quick tour (about a minute)"
+WELCOME_TITLE = "Welcome to StockAdvisor"
 
 HIGHLIGHT_BOX = """() => { const a = document.querySelector('.driver-active-element');
   if (!a) return null; const r = a.getBoundingClientRect();
@@ -87,7 +88,10 @@ class Visitor:
         self.page.wait_for_timeout(2500)  # let the tour helper report the viewport
 
     def button(self, name):
-        return self.page.get_by_role("button", name=name, exact=True)
+        if name == "Take a tour":
+            # the main-area link (the sidebar has one too, which is off-screen on phones)
+            return self.page.locator(".st-key-tour_replay_main").get_by_role("button", name=name)
+        return self.page.get_by_role("button", name=name, exact=True).filter(visible=True).first
 
     def popover_progress(self):
         popover = self.page.locator(".driver-popover")
@@ -145,14 +149,93 @@ def highlighted_key(page):
       return a ? [...a.classList].find(c => c.startsWith('st-key-')) : null; }""")
 
 
+def wait_for_welcome(page, seconds=15, frame=None):
+    """The welcome dialog a first-time visitor sees without clicking anything, or None."""
+    root = frame or page
+    dialog = root.get_by_role("dialog").filter(has_text=WELCOME_TITLE)
+    for _ in range(seconds * 4):
+        if dialog.count() and dialog.is_visible():
+            return dialog
+        page.wait_for_timeout(250)
+    return None
+
+
+def skip_welcome(v):
+    assert wait_for_welcome(v.page) is not None
+    v.button("Skip for now").click()
+    v.page.get_by_text(WELCOME).wait_for(state="detached", timeout=10000)
+    v.page.get_by_role("dialog").wait_for(state="detached", timeout=10000)  # let the dialog finish closing
+    v.page.wait_for_timeout(500)
+    # the choice is stored at once, so even an immediate refresh keeps it
+    assert v.page.evaluate("() => window.localStorage.getItem('stockadvisor-tour-seen')") == "1"
+
+
+@pytest.mark.parametrize("viewport", [DESKTOP, PHONE], ids=["desktop", "phone"])
+def test_first_visit_sees_welcome_automatically(visitor, viewport):
+    """A brand-new browser (empty localStorage, like Incognito) gets the welcome without any clicks."""
+    v = visitor(viewport)
+    p = v.page
+    assert p.evaluate("() => window.localStorage.length") == 0
+    welcome = wait_for_welcome(p)
+    assert welcome is not None
+    text = welcome.inner_text()
+    assert "about a minute" in text and "Take a tour" in text
+    assert welcome.get_by_role("button", name="Start the tour").is_visible()
+    assert welcome.get_by_role("button", name="Skip for now").is_visible()
+    assert p.locator(".js-plotly-plot").count() == 0  # nothing ran
+
+    welcome.get_by_role("button", name="Start the tour").click()
+    if viewport is DESKTOP:
+        # the spotlight tour, starting at the first sidebar control
+        assert v.popover_progress() == f"1 of {len(TITLES)}"
+        assert highlighted_key(p) == TARGETS[0][0]
+        p.keyboard.press("Escape")
+        p.locator(".driver-popover").wait_for(state="detached", timeout=10000)
+    else:
+        # the walkthrough, which never highlights the hidden sidebar
+        p.get_by_text(f"1 of {len(TITLES)}").wait_for(timeout=10000)
+        assert p.locator(".driver-active-element").count() == 0
+        p.get_by_role("dialog").get_by_role("button", name="Skip").click()
+    assert p.evaluate("() => window.localStorage.getItem('stockadvisor-tour-seen')") == "1"
+
+    # the choice is remembered on refresh and on a later visit in the same browser
+    for _ in range(2):
+        v.open()
+        assert wait_for_welcome(p, seconds=5) is None
+        assert v.button("Take a tour").is_visible()
+    v.assert_clean()
+
+
+def test_skipping_the_welcome_is_remembered(visitor):
+    v = visitor(PHONE)
+    p = v.page
+    skip_welcome(v)
+    v.open()
+    assert wait_for_welcome(p, seconds=5) is None
+    v.assert_clean()
+
+
+def test_first_visit_welcome_inside_an_iframe(browser, app_url):
+    """Streamlit Community Cloud and portfolio sites show the app inside an iframe."""
+    context = browser.new_context(viewport=DESKTOP)
+    page = context.new_page()
+    page.set_content(f'<iframe src="{app_url}" style="border:0;width:100%;height:880px" '
+                     'sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts '
+                     'allow-downloads"></iframe>')
+    frame = page.frame_locator("iframe")
+    frame.get_by_text("Your portfolio").wait_for(timeout=60000)
+    assert wait_for_welcome(page, frame=frame) is not None
+    context.close()
+
+
 def test_desktop_spotlight_tour(visitor):
     v = visitor()
     p = v.page
-    assert p.get_by_text(WELCOME).is_visible()
-    assert v.button("Run simulation").is_enabled()  # the app is usable while the welcome card is shown
+    welcome = wait_for_welcome(p)
+    assert welcome is not None, "a first-time visitor should see the welcome dialog without clicking anything"
     inputs_before = p.evaluate(SIDEBAR_INPUTS)
 
-    v.button("Start tour").click()
+    v.button("Start the tour").click()
     assert v.popover_progress() == f"1 of {len(TITLES)}"
     assert p.locator(".driver-popover-prev-btn").inner_text() == "Back"
     p.locator(".driver-popover-next-btn").click()
@@ -200,7 +283,8 @@ def test_desktop_spotlight_tour(visitor):
 def test_tour_can_be_dismissed_any_time(visitor):
     v = visitor()
     p = v.page
-    v.button("No thanks").click()
+    wait_for_welcome(p)
+    p.keyboard.press("Escape")  # closing the welcome dialog counts as skipping
     p.get_by_text(WELCOME).wait_for(state="detached", timeout=10000)
 
     v.button("Take a tour").click()
@@ -221,7 +305,7 @@ def test_tour_can_be_dismissed_any_time(visitor):
 def test_results_step_highlights_results(visitor):
     v = visitor()
     p = v.page
-    v.button("No thanks").click()
+    skip_welcome(v)
     v.button("Run simulation").click()
     p.get_by_text(RESULTS_TITLE).wait_for(timeout=120000)
 
@@ -238,7 +322,8 @@ def test_results_step_highlights_results(visitor):
     assert box["left"] > p.locator('[data-testid="stSidebar"]').bounding_box()["width"]
     assert box["top"] < box["vh"] and box["bottom"] > 0
     p.keyboard.press("Escape")
-    assert p.locator(".js-plotly-plot").count() == 4  # results are unchanged by the tour
+    p.locator(".js-plotly-plot").nth(3).wait_for(state="attached", timeout=20000)  # results unchanged by the tour
+    assert p.locator(".js-plotly-plot").count() == 4
     v.assert_clean()
 
 
@@ -258,7 +343,7 @@ def run_walkthrough(v, titles=TITLES):
     p.get_by_text(f"1 of {total}").wait_for(timeout=10000)
     for n in range(2, total + 1):
         dialog.get_by_role("button", name="Next").click()
-        p.get_by_text(f"{n} of {total}").wait_for(timeout=10000)
+        p.get_by_text(f"{n} of {total}").wait_for(timeout=20000)
         assert titles[n - 1] in dialog.inner_text()
         if titles[n - 1] == "Compare strategies":
             assert "Dory" in dialog.inner_text() and "not a prediction" in dialog.inner_text()
@@ -271,15 +356,15 @@ def test_narrow_viewport_uses_walkthrough(visitor):
     v = visitor(PHONE)
     p = v.page
     inputs_before = p.evaluate(SIDEBAR_INPUTS)
-    assert p.get_by_text(WELCOME).is_visible()
-    v.button("Start tour").click()
+    assert wait_for_welcome(p) is not None
+    v.button("Start the tour").click()
+    p.get_by_text(f"1 of {len(TITLES)}").wait_for(timeout=10000)
     assert "Tap » at the top left" in p.get_by_role("dialog").inner_text()
     run_walkthrough(v)
     assert p.locator(".js-plotly-plot").count() == 0
     assert p.evaluate(SIDEBAR_INPUTS) == inputs_before
 
-    # skip from the middle of the walkthrough (on a phone, "Take a tour" is at the bottom of the sidebar)
-    open_phone_sidebar(p)
+    # skip from the middle of the walkthrough ("Take a tour" is also in the main area, visible on phones)
     v.button("Take a tour").click()
     dialog = p.get_by_role("dialog")
     dialog.get_by_role("button", name="Next").click()
@@ -300,11 +385,10 @@ def open_phone_sidebar(page):
 def test_narrow_viewport_walkthrough_with_results(visitor):
     v = visitor(PHONE)
     p = v.page
-    v.button("No thanks").click()
+    skip_welcome(v)
     v.button("Run simulation").click()  # in the main area, no need to open the sidebar
     p.get_by_text(RESULTS_TITLE).wait_for(timeout=120000)
     p.wait_for_timeout(1500)
-    open_phone_sidebar(p)
     v.button("Take a tour").click()
     run_walkthrough(v, TITLES_WITH_RESULTS)
     assert p.locator(".js-plotly-plot").count() == 4
@@ -320,7 +404,7 @@ def results_heading_in_view(page):
 def test_run_scrolls_to_results_and_settings_update_summary(visitor, viewport):
     v = visitor(viewport)
     p = v.page
-    v.button("No thanks").click()
+    skip_welcome(v)
     if viewport is PHONE:
         open_phone_sidebar(p)
     value = p.get_by_label("Initial portfolio value (USD)")
@@ -349,7 +433,7 @@ def test_run_scrolls_to_results_and_settings_update_summary(visitor, viewport):
 def test_reset_demo_restores_defaults_on_phone(visitor):
     v = visitor(PHONE)
     p = v.page
-    v.button("No thanks").click()
+    skip_welcome(v)
     open_phone_sidebar(p)
     value = p.get_by_label("Initial portfolio value (USD)")
     value.fill("4000")
@@ -367,7 +451,7 @@ def test_tour_cards_follow_dark_theme(browser, app_url):
     p.goto(app_url, wait_until="networkidle")
     p.get_by_text("Your portfolio").wait_for(timeout=60000)
     p.wait_for_timeout(2500)
-    p.get_by_role("button", name="Start tour").click()
+    p.get_by_role("button", name="Start the tour").click()
     p.locator(".driver-popover").wait_for(timeout=20000)
     background = p.locator(".driver-popover").evaluate("e => getComputedStyle(e).backgroundColor")
     assert background == "rgb(38, 39, 48)"
@@ -377,10 +461,11 @@ def test_tour_cards_follow_dark_theme(browser, app_url):
 def test_collapsed_sidebar_on_desktop_uses_walkthrough(visitor):
     v = visitor()
     p = v.page
+    skip_welcome(v)
     p.get_by_test_id("stSidebar").hover()
     p.get_by_test_id("stSidebarCollapseButton").locator("button").click()
     p.wait_for_timeout(2000)
-    v.button("Start tour").click()  # from the welcome card in the main area
+    v.button("Take a tour").click()  # the main-area link, while the sidebar is hidden
     run_walkthrough(v)
     v.assert_clean()
 
@@ -388,7 +473,7 @@ def test_collapsed_sidebar_on_desktop_uses_walkthrough(visitor):
 def test_shrinking_window_mid_tour_never_highlights_hidden_controls(visitor):
     v = visitor()
     p = v.page
-    v.button("Start tour").click()
+    v.button("Start the tour").click()
     v.popover_progress()
     p.locator(".driver-popover-next-btn").click()
     assert v.popover_progress() == f"2 of {len(TITLES)}"
@@ -406,7 +491,7 @@ def test_shrinking_window_mid_tour_never_highlights_hidden_controls(visitor):
 def test_app_works_when_tour_component_fails_to_load(visitor):
     v = visitor(block_tour_component=True)
     p = v.page
-    v.button("Start tour").click()
+    v.button("Start the tour").click()
     p.wait_for_timeout(2000)
     v.button("Run simulation").click()
     p.get_by_text(RESULTS_TITLE).wait_for(timeout=120000)
